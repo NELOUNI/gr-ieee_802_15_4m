@@ -1,0 +1,11 @@
+build/*
+*.pyc
+.cproject
+.project
+.pydevproject
+examples/transceiver_OQPSK.py
+*.npy
+*~
+*.npy
+.idea/*
+**/.DS_Store

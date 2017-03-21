@@ -1,0 +1,30 @@
+In order to test the performance (basically the throughput) of the Master and the Slave 
+in the context of secondaries vacating the chanel for the Primary,
+
+Run the masterTunnel.py and slaveTunnel.py. 
+For that you need sudo rights, to create the Tun interface, configure, turn it up and create raw socket to test the flow of data over the link.
+
+The masterTunnel.py, and slaveTunnel.py include at the beginning paths for the PYTHONPATH and for the shared libraries to be loaded for the root user.    
+
+NOTE: dpkt should be installed where is gnuradio otherwise give it the path when using the scripts with root.
+
+sys.path[:0] = [options.PYTHONPATH,
+                "/path_to_dpkt_install/lib/python2.x/site-packages/dpkt"]
+
+####################################
+
+sys.path[:0] = ["/raid/nae/gnuradio-3.7_install/lib64/python2.6/site-packages",
+                "/raid/nae/gr-ieee802-15-4_GR_3.7_install/lib64/python2.6/site-packages",
+                "/raid/nae/misc/dpkt_install/lib/python2.6/site-packages/dpkt"]
+
+os.environ["LD_LIBRARY_PATH"]   = "/raid/nae/gnuradio-3.7_install/lib64/"
+os.environ["PKG_CONFIG_PATH"]   = "/raid/nae/gnuradio-3.7_install/lib64/pkgconfig"
+os.environ["DISPLAY"]           = ":0" 
+
+ctypes.cdll.LoadLibrary("/raid/nae/gnuradio-3.7/build/gr-blocks/lib/libgnuradio-blocks-3.7.3git.so.0.0.0")
+ctypes.cdll.LoadLibrary("/raid/nae/gnuradio-3.7/build/gr-uhd/lib/libgnuradio-uhd-3.7.3git.so.0.0.0")
+ctypes.cdll.LoadLibrary("/raid/nae/gnuradio-3.7/build/gr-analog/lib/libgnuradio-analog-3.7.3git.so.0.0.0")
+ctypes.cdll.LoadLibrary("/raid/nae/gnuradio-3.7/build/gr-digital/lib/libgnuradio-digital-3.7.3git.so.0.0.0")
+ctypes.cdll.LoadLibrary("/raid/nae/gr-ieee802-15-4_GR_3.7/build/lib/libgnuradio-ieee802_15_4.so")
+ctypes.cdll.LoadLibrary("/raid/nae/gnuradio-3.7_install/lib64/libgnuradio-wxgui-3.7.3git.so.0.0.0")
+
