@@ -5,6 +5,7 @@ build/*
 .pydevproject
 examples/transceiver_OQPSK.py
 *.npy
+*.swp
 *~
 *.npy
 .idea/*
