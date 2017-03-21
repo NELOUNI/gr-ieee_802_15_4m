@@ -3,7 +3,6 @@ build/*
 .cproject
 .project
 .pydevproject
-examples/transceiver_OQPSK.py
 examples/*.swp
 *.npy
 *.swp
