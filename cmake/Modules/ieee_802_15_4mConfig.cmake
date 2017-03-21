@@ -1,0 +1,30 @@
+INCLUDE(FindPkgConfig)
+PKG_CHECK_MODULES(PC_IEEE_802_15_4M ieee_802_15_4m)
+
+FIND_PATH(
+    IEEE_802_15_4M_INCLUDE_DIRS
+    NAMES ieee_802_15_4m/api.h
+    HINTS $ENV{IEEE_802_15_4M_DIR}/include
+        ${PC_IEEE_802_15_4M_INCLUDEDIR}
+    PATHS ${CMAKE_INSTALL_PREFIX}/include
+          /usr/local/include
+          /usr/include
+)
+
+FIND_LIBRARY(
+    IEEE_802_15_4M_LIBRARIES
+    NAMES gnuradio-ieee_802_15_4m
+    HINTS $ENV{IEEE_802_15_4M_DIR}/lib
+        ${PC_IEEE_802_15_4M_LIBDIR}
+    PATHS ${CMAKE_INSTALL_PREFIX}/lib
+          ${CMAKE_INSTALL_PREFIX}/lib64
+          /usr/local/lib
+          /usr/local/lib64
+          /usr/lib
+          /usr/lib64
+)
+
+INCLUDE(FindPackageHandleStandardArgs)
+FIND_PACKAGE_HANDLE_STANDARD_ARGS(IEEE_802_15_4M DEFAULT_MSG IEEE_802_15_4M_LIBRARIES IEEE_802_15_4M_INCLUDE_DIRS)
+MARK_AS_ADVANCED(IEEE_802_15_4M_LIBRARIES IEEE_802_15_4M_INCLUDE_DIRS)
+

@@ -1,0 +1,34 @@
+<?xml version='1.0' encoding='ASCII'?>
+<block>
+  <name>IEEE802.15.4 PHY</name>
+  <key>ieee802_15_4_phy</key>
+  <category>IEEE802.15.4</category>
+  <import>execfile("/users/nae/.grc_gnuradio/ieee802_15_4_phy.py")</import>
+  <make>ieee802_15_4_phy()</make>
+  <sink>
+    <name>rxin</name>
+    <type>complex</type>
+    <vlen>1</vlen>
+    <optional>1</optional>
+  </sink>
+  <sink>
+    <name>txin</name>
+    <type>message</type>
+    <optional>True</optional>
+  </sink>
+  <source>
+    <name>txout</name>
+    <type>complex</type>
+    <vlen>1</vlen>
+    <optional>1</optional>
+  </source>
+  <source>
+    <name>rxout</name>
+    <type>message</type>
+    <optional>True</optional>
+  </source>
+  <doc>
+
+/users/nae/.grc_gnuradio/ieee802_15_4_phy.py</doc>
+  <grc_source>/users/nae/tvws/gr-ieee802-15-4/examples/ieee802_15_4_PHY.grc</grc_source>
+</block>
