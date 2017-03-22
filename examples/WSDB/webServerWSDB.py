@@ -40,7 +40,7 @@ def copyanything(src, dst):
 
 def init_db():
     """Creates the database tables."""
-    copyanything('utils/spectrumdB.back','utils/spectrumdB')
+    copyanything('spectrumdB.back','spectrumdB')
 
 @app.route('/logout')
 def logout():
