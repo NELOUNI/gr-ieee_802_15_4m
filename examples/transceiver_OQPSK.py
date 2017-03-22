@@ -6,6 +6,15 @@
 # Generated: Tue Mar 21 16:13:54 2017
 ##################################################
 
+# Kill eventual Zombie process
+import subprocess, os, sys
+try:
+        subprocess.call('ps auxw | grep -ie \'listenMaster ncat tee\' | awk \'{print $2}\' | xargs sudo kill -9', shell=True) #FIXME ps -all or ps aux
+        #wifi_file_PATH = "/home/"+os.environ['USER']+"/.grc_gnuradio/wifi_phy_hier.py"
+        #execfile(wifi_file_PATH) #FIXME when calling this script using sudoEnv alias $USER = root, How to retrieve the calling user's home
+except OSError as e:
+    print >>sys.stderr, "Execution failed:", e
+
 if __name__ == '__main__':
     import ctypes
     import sys
@@ -19,7 +28,28 @@ if __name__ == '__main__':
 import os
 import sys
 sys.path.append(os.environ.get('GRC_HIER_PATH', os.path.expanduser('~/.grc_gnuradio')))
+sys.path.append("./WSDB")
+sys.path.append("../python")
 
+from gnuradio import uhd, digital
+from gnuradio.eng_option import eng_option
+from gnuradio import filter
+from gnuradio.filter import firdes
+from optparse import OptionParser
+from multiprocessing import  Pipe
+
+import json, pycurl, StringIO
+import pmt, time ,wx
+import threading, signal, string, socket, random, struct, fcntl
+import webServerWSDB
+from webServerWSDB import app
+import select
+import psutil
+from fcntl import ioctl
+from mac import *
+
+from packet import Packet
+##################
 from PyQt4 import Qt
 from PyQt4.QtCore import QObject, pyqtSlot
 from gnuradio import blocks
@@ -36,7 +66,6 @@ import ieee802_15_4
 import pmt
 import sip
 from gnuradio import qtgui
-
 
 class transceiver_OQPSK(gr.top_block, Qt.QWidget):
 
