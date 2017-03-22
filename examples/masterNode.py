@@ -34,7 +34,7 @@ except OSError as e:
 #
 # /////////////////////////////////////////////////////////////////////////////
 #import wifi_phy_hier
-execfile("/home/naceur/.grc_gnuradio/wifi_phy_hier.py")
+execfile("/home/nae/.grc_gnuradio/wifi_phy_hier.py")
 
 from gnuradio import blocks, gr, uhd, eng_notation, digital
 from gnuradio.eng_option import eng_option
