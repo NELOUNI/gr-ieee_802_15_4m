@@ -193,7 +193,7 @@ if __name__ == '__main__':
 	print "Running with SSL Encryption"
         from OpenSSL import SSL
         context = SSL.Context(SSL.SSLv23_METHOD)
-        context.use_privatekey_file('keys/antd.nist.gov.key')
-        context.use_certificate_file('keys/antd.nist.gov.crt')
+        context.use_privatekey_file('../utils/keys/rsa.key')
+        context.use_certificate_file('../utils/keys/rsa.crt')
         app.run(host='0.0.0.0', port=options.port, ssl_context=context)
 

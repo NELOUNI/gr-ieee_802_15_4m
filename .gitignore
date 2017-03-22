@@ -4,7 +4,7 @@ build/*
 .project
 .pydevproject
 examples/*.swp
-examples/utils/keys/domain.cz.*
+examples/utils/keys/rsa.*
 *.npy
 *.swp
 *~
