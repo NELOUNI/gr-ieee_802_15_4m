@@ -55,16 +55,6 @@ import pmt
 import sip
 
 
-#def open_tun_interface(tun_device_filename):
-#    
-#    mode = IFF_TAP | IFF_NO_PI
-#    TUNSETIFF = 0x400454ca
-#
-#    tun = os.open(tun_device_filename, os.O_RDWR)
-#    ifs = ioctl(tun, TUNSETIFF, struct.pack("16sH", "gr%d", mode))
-#    ifname = ifs[:16].strip("\x00")
-#    return (tun, ifname)
-
 
 class broadcastScript():
 
@@ -321,13 +311,14 @@ def sync(no_usrp, tunnel, scan, dwell, slot, period, interval):
     data = generator()	
     gotSync = False
     if not no_usrp:
-  	if (i == len(Lines)):
+  	#if (i == len(Lines)):
+  	if (i == len(frequencies)):
   	    print ("All available frequencies have been scanned. \n ...Looping again ")
   	    i = 1
 	print "\n Trying frequency:", frequencies[i]/1e6, " MHz"
-	tb.set_freq(frequencies[i]) 
+	tb.set_freq(frequencies[i], tb.lo_offset) 
 	print " Re-tuned to:     ", tb.get_freq()/1e6, " MHz"
-    with open("listenSlave", "r") as flistenSlave:	
+    with open("utils/listenSlave", "r") as flistenSlave:	
           time.sleep(dwell)
           for line in flistenSlave:
                         if ('BBBBBBBB' in line):
@@ -389,11 +380,11 @@ def main(top_block_cls=transceiver_OQPSK_Slave):
 			   help="IP address of the USRP without \"addr=\"")
     parser.add_option("-s", "--samp-rate",type="eng_float", default=4,
 		           help="USRP sampling rate in MHz [default=%default]")
-    parser.add_option("", "--rx_gain",type="eng_float", default=0,
+    parser.add_option("", "--rx-gain",type="eng_float", default=0,
                            help="set the RX gain of the transceiver [default=%default]")
-    parser.add_option("", "--tx_gain",type="eng_float", default=0,
+    parser.add_option("", "--tx-gain",type="eng_float", default=0,
                            help="set the TX gain of the transceiver [default=%default]")
-    parser.add_option("-f", "--init-freq", type="eng_float", default=2412,
+    parser.add_option("-f", "--init-freq", type="eng_float", default=174,
 		           help="initial frequency in MHz [default=%default]")
     parser.add_option("", "--lo_offset", type="eng_float", default=0,
                            help="Local Oscillator frequency in MHz [default=%default]") 	
@@ -401,8 +392,12 @@ def main(top_block_cls=transceiver_OQPSK_Slave):
 		           help="select over the wire data format (sc16 or sc8) [default=%default]")
     parser.add_option("-l", "--no-self-loop", action="store_true", default=False,
                            help="enable mechanism of avoiding self-routed packets [default=%default]")
+    parser.add_option("", "--source", type="choice", choices=['socket', 'tuntap', 'strobe'], default='tuntap',
+                           help="'tuntap' interface, 'socket' or 'strobe' [default=%default]")  
     parser.add_option("-y", "--bytes", type="eng_float", default=256,
                            help="Number of bytes to read/write from/to filedescriptors (for debug purpose) [default=%default]")
+    parser.add_option("-t", "--tunnel",  action="store_true", default=False,
+                       	   help="enable tunnel mode or send random data generated locally at slave node [default=%default]")
     parser.add_option("-i", "--interval", type="eng_float", default=0.2,
                            help="interval in seconds between two packets being sent [default=%default]")
     parser.add_option("-S", "--scan-interv", type="eng_float", default=2,
@@ -430,12 +425,8 @@ def main(top_block_cls=transceiver_OQPSK_Slave):
     word = "FFFFFFFF"
     port = "52004"
     i = 1
-    ffreqs = open('utils/freqs.csv') #FIXME
     initialFreq = 1e6 * float(options.init_freq)
-
-    Lines = ffreqs.readlines()
-    frequencies = [float(e.strip()) for e in Lines]
-    ffreqs.close()
+    frequencies = [x * 1e6 for x in (TVWS_channelmap.Channels).values()]
     open('listenSlave', 'w').close()
     tb = top_block_cls(options.usrp_addr, 
 		       options.no_usrp, 
@@ -450,13 +441,14 @@ def main(top_block_cls=transceiver_OQPSK_Slave):
 
     if not options.no_usrp:	
 	from gnuradio import uhd, digital
-	tb.set_gain(options.gain)
+	tb.set_rx_gain(options.rx_gain)
+	tb.set_tx_gain(options.tx_gain)
 	tb.set_samp_rate(options.samp_rate*1e6)
     	tb.set_freq(initialFreq, options.lo_offset) # initial frequency
     	print "\n Initial frequency: ", tb.get_freq()/1e6, "MHz"
 	print " Local Oscillator offset: ", tb.get_lo_offset()/1e6, "MHz \n"
 
-    subp_listenSlave = subprocess.Popen("xterm -hold -e \"ncat -u -l -p 3333 | tee listenSlave\"")#,  shell=True)
+    subp_listenSlave = subprocess.Popen("xterm -hold -e \"ncat -u -l -p 3333 | tee listenSlave\"",  shell=True)
 
     if options.source == "tuntap": 
     	try:
@@ -466,7 +458,9 @@ def main(top_block_cls=transceiver_OQPSK_Slave):
 
    	
     ### Frequency Sweep procedure ##   	
-    threading.Timer(2,sync,[options.no_usrp, options.tunnel, options.scan_interv, options.dwell, options.slot, options.period_check, options.interval]).start()
+    threading.Timer(2,
+		    sync,
+		    [options.no_usrp, options.tunnel, options.scan_interv, options.dwell, options.slot, options.period_check, options.interval]).start()
 
     #if (options.tunnel):
     #    parent_conn, child_conn = Pipe()		
@@ -493,6 +487,16 @@ def open_tun_interface(tun_device_filename):
             
        	tun = os.open(tun_device_filename, os.O_RDWR)
         return tun
+
+#def open_tun_interface(tun_device_filename):
+#    
+#    mode = IFF_TAP | IFF_NO_PI
+#    TUNSETIFF = 0x400454ca
+#
+#    tun = os.open(tun_device_filename, os.O_RDWR)
+#    ifs = ioctl(tun, TUNSETIFF, struct.pack("16sH", "gr%d", mode))
+#    ifname = ifs[:16].strip("\x00")
+#    return (tun, ifname)
 
 #class tunnel():
 #
@@ -575,4 +579,3 @@ if __name__ == '__main__':
    except KeyboardInterrupt:
 	os.remove(listenSlave)
         sys.exit(0)
-

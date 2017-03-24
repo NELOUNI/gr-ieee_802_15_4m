@@ -393,9 +393,9 @@ def main(top_block_cls=transceiver_OQPSK_Master):
 			   help="IP address of the USRP without \"addr=\"")
     parser.add_option("-s", "--samp-rate",type="eng_float", default=4,
 		           help="USRP sampling rate in MHz [default=%default]")
-    parser.add_option("", "--rx_gain",type="eng_float", default=0,
+    parser.add_option("", "--rx-gain",type="eng_float", default=0,
                            help="set the RX gain of the transceiver [default=%default]")
-    parser.add_option("", "--tx_gain",type="eng_float", default=0,
+    parser.add_option("", "--tx-gain",type="eng_float", default=0,
                            help="set the TX gain of the transceiver [default=%default]")
     parser.add_option("-f", "--init-freq", type="eng_float", default=716,
 		           help="initial frequency in MHz [default=%default]")

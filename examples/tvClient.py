@@ -24,7 +24,7 @@ if __name__ == '__main__':
         parser.add_option("-v","--verbose"         , action="store_true", default=False, help="[default=%default]")
 	parser.add_option("-d","--uhd-dir"         , default=os.getenv("HOME")+"/uhd", help="installation directory of uhd, [default=%default]")
         parser.add_option("-c","--video"           , help="location of the video to play back, [default=%default]", default=None)
-        parser.add_option("-p","--port"            , help="port number to post to webServer, [default=%default]", default=5000)
+        parser.add_option("-p","--port"            , help="port number to post to webServer, [default=%default]", default=9001)
         parser.add_option("-W","--web-server"      , help="webServer address, [default=%default]", default="127.0.0.1")
         parser.add_option("-s","--samp-rate"       , type="eng_float",   help="sample rate in MHz at which to play back the video, [default=%default]", default=6.25)
 
@@ -41,8 +41,13 @@ if __name__ == '__main__':
 
 	c.setopt(pycurl.SSL_VERIFYPEER, 1)
 	c.setopt(pycurl.SSL_VERIFYHOST, 2)
-	c.setopt(pycurl.CAINFO, "utils/keys/rsa.crt")
-
+        if (os.path.isfile('../utils/keys/rsa.crt')):
+           try:
+		c.setopt(pycurl.CAINFO, "utils/keys/rsa.crt")
+           except OSError as e:
+		print "Error", e
+	else: 
+	   print "Error running tv Broadcast Client, Authentication key needed in ../utils/keys/"
         c.setopt(c.HTTPHEADER, ['Accept: application/json', 'Content-Type: application/json','charsets: utf-8'])
         c.setopt(c.URL, 'https://'+ options.web_server + ':'+str(options.port))
         # send all data to this function
