@@ -180,7 +180,7 @@ def update():
 if __name__ == '__main__':
 
     parser = OptionParser(option_class=eng_option, usage="%prog: [options]")
-    parser.add_option("-p","--port", type="int", default=5000)
+    parser.add_option("-p","--port", type="int", default=9001)
     parser.add_option("-s","--ssl", action="store_true", default=False,
                            help="Use of SSL Encryption")
     (options, args) = parser.parse_args()
@@ -190,10 +190,16 @@ if __name__ == '__main__':
 	print "Running without SSL Encryption"
         app.run(host='0.0.0.0', port=options.port)
     else:
-	print "Running with SSL Encryption"
-        from OpenSSL import SSL
-        context = SSL.Context(SSL.SSLv23_METHOD)
-        context.use_privatekey_file('../utils/keys/rsa.key')
-        context.use_certificate_file('../utils/keys/rsa.crt')
-        app.run(host='0.0.0.0', port=options.port, ssl_context=context)
+        if (os.path.isfile('../utils/keys/rsa.key') or os.path.isfile('../utils/keys/rsa.crt')):
+	  try:
+      	     print "Running with SSL Encryption"
+      	     from OpenSSL import SSL
+      	     context = SSL.Context(SSL.SSLv23_METHOD)
+      	     context.use_privatekey_file('../utils/keys/rsa.key')
+      	     context.use_certificate_file('../utils/keys/rsa.crt')
+      	     app.run(host='0.0.0.0', port=options.port, ssl_context=context)
+   	  except OSError as exc: 
+	      print "Error Running WSDB webServer"
+        else: print "Authentication key needed in ../utils/keys/"
+		
 

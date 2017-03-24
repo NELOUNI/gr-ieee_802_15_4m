@@ -10,6 +10,7 @@
 import subprocess, os, sys
 try:
         subprocess.call('ps auxw | grep -ie \'listenMaster ncat tee\' | awk \'{print $2}\' | xargs sudo kill -9', shell=True) #FIXME ps -all or ps aux
+        subprocess.call('ps auxw | grep -ie ncat | awk \'{print $2}\' | xargs sudo kill -9', shell=True) #FIXME ps -all or ps aux
 except OSError as e:
     print >>sys.stderr, "Execution failed:", e
 
@@ -30,19 +31,14 @@ sys.path.append("./WSDB")
 sys.path.append("../python") #FIXME Ignored after adding mac and packet py files under python
 
 from gnuradio import uhd, digital
-from gnuradio.eng_option import eng_option
-from gnuradio import filter
-from gnuradio.filter import firdes
-from optparse import OptionParser
 from multiprocessing import  Pipe
-import json, pycurl, StringIO, time
+import json, pycurl, StringIO, time, select, psutil
 import threading, signal, string, socket, random, struct, fcntl
 import webServerWSDB
-from webServerWSDB import app
-import select, psutil
 from fcntl import ioctl
 from mac import *
 from packet import Packet
+import TVWS_channelmap
 ##################
 from PyQt4 import Qt
 from PyQt4.QtCore import QObject, pyqtSlot
@@ -57,14 +53,14 @@ from ieee802_15_4_oqpsk_phy import ieee802_15_4_oqpsk_phy  # grc-generated hier_
 from optparse import OptionParser
 import foo
 import ieee802_15_4
-import ieee802_11
+import ieee802_11 #FIXME
 import pmt
 import sip
 from gnuradio import qtgui
 
 class transceiver_OQPSK_Master(gr.top_block, Qt.QWidget):
 
-    def __init__(self, addr, no_usrp, rate, lo_offset, otw, source, no_self_loop, debug_MAC):
+    def __init__(self, addr, no_usrp, rate, lo_offset, initialFreq, otw, source, no_self_loop, debug_MAC, wireshark):
         gr.top_block.__init__(self, "IEEE 802.15.4m Transceiver using OQPSK ieee802_15_4_oqpsk_phy_0")
         Qt.QWidget.__init__(self)
         self.setWindowTitle("IEEE 802.15.4m Transceiver using OQPSK ieee802_15_4_oqpsk_phy_0")
@@ -94,11 +90,13 @@ class transceiver_OQPSK_Master(gr.top_block, Qt.QWidget):
         self.addr 	  = addr
 	self.no_usrp	  = no_usrp
 	self.samp_rate	  = rate
+	self.freq	  = initialFreq
+	self.lo_offset    = lo_offset
 	self.otw	  = otw
         self.no_self_loop = no_self_loop	
 	self.debug_MAC	  = debug_MAC
-	self.lo_offset    = lo_offset
 	self.source	  = source
+	self.wireshark	  = wireshark
         ##################################################
         # Blocks
         ##################################################
@@ -181,8 +179,8 @@ class transceiver_OQPSK_Master(gr.top_block, Qt.QWidget):
         # Ethernet Encapsulation #TODO explain its usage, Specific to 802.11 ? 
         self.ieee802_11_ether_encap_0 = ieee802_11.ether_encap(True)
 
-        self._freq_options = [1000000 * (2400 + 5 * (i - 10)) for i in range(11, 27)]
-        self._freq_labels = [str(i) for i in range(11, 27)]
+        self._freq_options = [TVWS_channelmap.get_TVWS_freq(i) for i in range(2, 69)]
+        self._freq_labels = [str(i) for i in range(2, 69)]
         self._freq_tool_bar = Qt.QToolBar(self)
         self._freq_tool_bar.addWidget(Qt.QLabel('Channel'+": "))
         self._freq_combo_box = Qt.QComboBox()
@@ -191,14 +189,9 @@ class transceiver_OQPSK_Master(gr.top_block, Qt.QWidget):
         self._freq_callback = lambda i: Qt.QMetaObject.invokeMethod(self._freq_combo_box, "setCurrentIndex", Qt.Q_ARG("int", self._freq_options.index(i)))
         self._freq_callback(self.freq)
         self._freq_combo_box.currentIndexChanged.connect(
-        	lambda i: self.set_freq(self._freq_options[i]))
+        	lambda i: self.set_freq(self._freq_options[i],lo_offset))
 
         self.top_layout.addWidget(self._freq_tool_bar)
-
-        self.foo_packet_pad_0 = foo.packet_pad(False, False, 0.001, 2000, 2000)
-	# Foo block #TODO explain its usage
-        #self.foo_packet_pad2_0 = foo.packet_pad2(False, False, 0.001, 0, 10000) ## ?! ##
-        #(self.foo_packet_pad2_0).set_min_output_buffer(100000)
 
         ##################################################
         # Asynch Message Connections
@@ -215,49 +208,42 @@ class transceiver_OQPSK_Master(gr.top_block, Qt.QWidget):
 		self.blocks_socket_pdu_0_Tx = blocks.socket_pdu("UDP_SERVER", "localhost", "52002", 10000)
 		self.blocks_socket_pdu_0_Rx = blocks.socket_pdu("UDP_CLIENT", "localhost", "3334", 10000)
 
-        	self.msg_connect(self.ieee802_15_4_rime_stack_0, "bcout", self.self.blocks_socket_pdu_0_Rx, "pdus")
+        	self.msg_connect(self.ieee802_15_4_rime_stack_0, "bcout", self.blocks_socket_pdu_0_Rx, "pdus")
         	self.msg_connect(self.blocks_socket_pdu_0_Tx,    "pdus" , self.ieee802_15_4_rime_stack_0, "bcin") 
 
 	elif self.source == "strobe":
         	self.blocks_message_strobe_0 = blocks.message_strobe(pmt.intern("Hello World!\n"), 1000)
         	self.msg_connect((self.blocks_message_strobe_0, 'strobe'), (self.ieee802_15_4_rime_stack_0, 'bcin'))
 
-	########## Wireshark Test and Log Section #######
-	#if options.wireshark:
-		#self.foo_wireshark_connector_0 = foo.wireshark_connector(127, True)
+	if self.wireshark:
+		self.foo_wireshark_connector_0 = foo.wireshark_connector(127, True)
 
-        	#self.blocks_file_sink_0 = blocks.file_sink(gr.sizeof_char*1, "/tmp/ofdm.pcap", True)
-        	#self.blocks_file_sink_0.set_unbuffered(True)
+        	self.blocks_file_sink_0 = blocks.file_sink(gr.sizeof_char*1, "/tmp/ofdm.pcap", True)
+        	self.blocks_file_sink_0.set_unbuffered(True)
 
-        	#self.connect((self.foo_wireshark_connector_0, 0), (self.blocks_file_sink_0, 0)) 
+        	self.connect((self.foo_wireshark_connector_0, 0), (self.blocks_file_sink_0, 0)) 
 
-        	#self.msg_connect(self.ieee802_15_4_mac_0, "PHY", self.foo_wireshark_connector_0, "in")
-        	#self.msg_connect(self.ieee802_15_4_oqpsk_phy_0, "mac_out", self.foo_wireshark_connector_0, "in")
-
-
-        ##################################################
-        # Connections
-        ##################################################
+        	self.msg_connect(self.ieee802_15_4_mac_0, "PHY", self.foo_wireshark_connector_0, "in")
+        	self.msg_connect(self.ieee802_15_4_oqpsk_phy_0, "mac_out", self.foo_wireshark_connector_0, "in")
+	
         self.msg_connect((self.ieee802_15_4_mac_0, 'pdu out'), (self.ieee802_15_4_oqpsk_phy_0, 'txin'))
         self.msg_connect((self.ieee802_15_4_mac_0, 'app out'), (self.ieee802_15_4_rime_stack_0, 'fromMAC'))
         self.msg_connect((self.ieee802_15_4_oqpsk_phy_0, 'rxout'), (self.ieee802_15_4_mac_0, 'pdu in'))
         self.msg_connect((self.ieee802_15_4_rime_stack_0, 'toMAC'), (self.ieee802_15_4_mac_0, 'app in'))
-        self.connect((self.foo_packet_pad_0, 0), (self.ieee802_15_4_oqpsk_phy_0, 0))
-        self.connect((self.ieee802_15_4_oqpsk_phy_0, 0), (self.foo_packet_pad_0, 0))
+
+        ##################################################
+        # Connections
+        ##################################################
         self.connect((self.ieee802_15_4_oqpsk_phy_0, 0), (self.qtgui_freq_sink_x_0, 0))
         if self.no_usrp:
-                self.connect((self.ieee802_15_4_oqpsk_phy_0, 0), ((self.foo_packet_pad2_0, 0))) 
-                self.connect((self.ieee802_15_4_oqpsk_phy_0, 0), ((self.blocks_slaveFileSink, 0))) 
-                self.connect((self.blocks_slaveFileSource, 0), (self.ieee802_15_4_oqpsk_phy_0, 0)) 
-                self.connect((self.foo_packet_pad2_0, 0), (self.ieee802_15_4_oqpsk_phy_0, 0)) 
+                self.connect((self.ieee802_15_4_oqpsk_phy_0, 0), ((self.blocks_file_sink_Master, 0))) 
+                self.connect((self.blocks_file_source_Master, 0), (self.ieee802_15_4_oqpsk_phy_0, 0)) 
         else:
-                self.connect((self.ieee802_15_4_oqpsk_phy_0, 0), ((self.foo_packet_pad2_0, 0))) 
-                self.connect((self.ieee802_15_4_oqpsk_phy_0, 0), ((self.uhd_usrp_source_0, 0))) 
+                self.connect((self.ieee802_15_4_oqpsk_phy_0, 0), ((self.uhd_usrp_sink_0, 0))) 
                 self.connect((self.uhd_usrp_source_0, 0), (self.ieee802_15_4_oqpsk_phy_0, 0)) 
-                self.connect((self.foo_packet_pad2_0, 0), (self.uhd_usrp_sink_0, 0)) 
 
     def closeEvent(self, event):
-        self.settings = Qt.QSettings("GNU Radio", "transceiver_OQPSK_")
+        self.settings = Qt.QSettings("GNU Radio", "transceiver_OQPSK_Master")
         self.settings.setValue("geometry", self.saveGeometry())
         event.accept()
 
@@ -276,13 +262,10 @@ class transceiver_OQPSK_Master(gr.top_block, Qt.QWidget):
     def get_freq(self):
         return self.freq
 
-#######################################################################################
-#######################################################################################
-    def set_freq(self, freq):
+    def set_freq(self, freq, lo_offset):
         self.freq = freq
+        self.lo_offset = lo_offset
         self._freq_callback(self.freq)
-        #self.uhd_usrp_sink_0.set_center_freq(self.freq, 0)
-        #self.uhd_usrp_source_0.set_center_freq(self.freq, 0)
         self.uhd_usrp_sink_0.set_center_freq(uhd.tune_request(self.freq - self.lo_offset, self.lo_offset), 0)
         self.uhd_usrp_source_0.set_center_freq(uhd.tune_request(self.freq - self.lo_offset, self.lo_offset), 0)
 
@@ -294,23 +277,18 @@ class transceiver_OQPSK_Master(gr.top_block, Qt.QWidget):
     def get_lo_offset(self):
         return self.lo_offset
 
-    def set_lo_offset(self, lo_offset):
-        self.lo_offset = lo_offset
-        self.uhd_usrp_sink_0.set_center_freq(uhd.tune_request(self.freq - self.lo_offset, self.lo_offset), 0)
-        self.uhd_usrp_source_0.set_center_freq(uhd.tune_request(self.freq - self.lo_offset, self.lo_offset), 0)
-
 def getFreqMap(spec_dB, remote_dB):
 
      if(spec_dB == "google"):
 	url = 'https://www.googleapis.com/rpc'
      elif(spec_dB == "local"):
-	url = 'http://127.0.0.1:5000/'
+	url = 'http://127.0.0.1:9001/'
      elif(spec_dB == "remote"):  
-        url = 'https://'+remote_dB+':5000'
+        url = 'https://'+remote_dB+':9001'
 
      postdata = []
      buf = StringIO.StringIO()
-     with open("postdata.txt", "r") as fpostdata:
+     with open("utils/postdata.txt", "r") as fpostdata:
            while True:
                 c = fpostdata.read(1)
                 postdata.append(c) 
@@ -328,6 +306,8 @@ def getFreqMap(spec_dB, remote_dB):
 
      	c.setopt(pycurl.SSL_VERIFYPEER, 0)
      	c.setopt(pycurl.SSL_VERIFYHOST, 2)
+	c.setopt(pycurl.CONNECTTIMEOUT, 2)
+    	c.setopt(pycurl.TIMEOUT, 2)
 
      # send all data to this function
      c.setopt(c.WRITEFUNCTION, buf.write)
@@ -336,8 +316,11 @@ def getFreqMap(spec_dB, remote_dB):
      c.setopt(c.POSTFIELDS, postdata_str)
      # if we don't provide POSTFIELDSIZE, libcurl will strlen() by itself
      c.setopt(c.POSTFIELDSIZE, len(postdata_str))
-     # Perform the request, res will get the return code
-     c.perform()
+     try:
+        # Perform the request
+        c.perform()
+     except pycurl.error as e:    # This is the correct syntax
+        print e, "\n\n**** Please start the WSDB and/or make sure you set appropriate configuration (host/port/authentication)\n\n"
      json = buf.getvalue()
      buf.close()
      c.close()
@@ -345,16 +328,13 @@ def getFreqMap(spec_dB, remote_dB):
 
 def parseJSON(n, spec_dB):
 	global centerFreqs
-	
         local_n = n
-        #fout = open ("myFrequencies.csv", "w+")
         objs = json.loads(local_n)
         frequencyRanges = objs["result"]["spectrumSchedules"][0]["spectra"][0]["frequencyRanges"]
         nbr_frequencies = len(frequencyRanges)
 	centerFreqs = []
         for i in range (0, nbr_frequencies):
 		centerFreqs.append(0.5*(frequencyRanges[i]["startHz"] + frequencyRanges[i]["stopHz"]))
-        #fout.close()
 	if (spec_dB == "google"): centerFreqs = [x / 1000000 for x in centerFreqs]
 	print "There are ",nbr_frequencies, "frequencies available:", centerFreqs, "MHz"
 
@@ -364,39 +344,37 @@ def process(no_usrp, beacon_interv, spec_dB, remote_dB):
  	
     size 	  = 80    
     beacon        = "B" * 8
-    terminate     = False
 
     #Opening socket
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     # bind it
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-
     #Sending loop
-    while not terminate:
-		beacon = beacon + (size - len(beacon)) * " " 
-	        print "\nBeacon sent: ", beacon
-	    	s.sendto(beacon, ("localhost", int(port)))    
-		#tun.run()
-	    	time.sleep(float(beacon_interv))
-		print "\nQuerying spectrum DB for available TV channels ..."
-		n = getFreqMap(spec_dB, remote_dB)
-	        parseJSON(n, spec_dB)
-		print "Actual frequency: ", actualFreq/1e6, "MHz \n"
-	        print "#######################################################################"
-	        word = actualFreq
-		if ((actualFreq / 1000000) not in centerFreqs) or (actualFreq < 400000000):
-    			word = 1000000 * random.choice(centerFreqs)
-			if (word < 400000000): print "Frequency chosen not supported with SBX daughterboard"
-    			else: 
-		        	actualFreq = word
-    		        	# Need to handle the 200kHz channel BW assignement 
-				if not no_usrp:
-	    		        	newFreq = int(word)
-	    		        	tb.set_freq(newFreq)
-	    		        	print "\n\n\nSwitching to new Frequency: ", actualFreq / 1000000
-		        	print "*********************************************************************"
+    while True:
+	beacon = beacon + (size - len(beacon)) * " " 
+        print "\nBeacon sent: ", beacon
+    	s.sendto(beacon, ("localhost", int(port)))    
+	#tun.run()
+    	time.sleep(float(beacon_interv))
+	print "\nQuerying spectrum DB for available TV channels ..."
+	n = getFreqMap(spec_dB, remote_dB)
+        parseJSON(n, spec_dB)
+	print "Actual frequency: ", actualFreq/1e6, "MHz \n"
+        print "#######################################################################"
+        word = actualFreq
+	if ((actualFreq / 1000000) not in centerFreqs) or (actualFreq < 400000000):
+		word = 1000000 * random.choice(centerFreqs)
+		if (word < 400000000): print "Frequency chosen not supported with SBX daughterboard"
+		else: 
+	        	actualFreq = word
+	        	# Need to handle the 200kHz channel BW assignement 
+			if not no_usrp:
+    		        	newFreq = int(word)
+    		        	tb.set_freq(newFreq, tb.lo_offset)
+    		        	print "\n\n\nSwitching to new Frequency: ", actualFreq / 1000000
+	        	print "*********************************************************************"
 
-def main(top_block_cls=transceiver_OQPSK_Master):#, options=None):
+def main(top_block_cls=transceiver_OQPSK_Master):
     if gr.enable_realtime_scheduling() != gr.RT_OK:
         print "Error: failed to enable real-time scheduling."
     from distutils.version import StrictVersion
@@ -415,16 +393,16 @@ def main(top_block_cls=transceiver_OQPSK_Master):#, options=None):
 			   help="IP address of the USRP without \"addr=\"")
     parser.add_option("-s", "--samp-rate",type="eng_float", default=4,
 		           help="USRP sampling rate in MHz [default=%default]")
-    parser.add_option("-g", "--gain",type="eng_float", default=0,
-                           help="set the gain of the transceiver [default=%default]")
-    parser.add_option("-f", "--init-freq", type="eng_float", default=485,
+    parser.add_option("", "--rx_gain",type="eng_float", default=0,
+                           help="set the RX gain of the transceiver [default=%default]")
+    parser.add_option("", "--tx_gain",type="eng_float", default=0,
+                           help="set the TX gain of the transceiver [default=%default]")
+    parser.add_option("-f", "--init-freq", type="eng_float", default=716,
 		           help="initial frequency in MHz [default=%default]")
     parser.add_option("", "--lo_offset", type="eng_float", default=0,
                            help="Local Oscillator frequency in MHz [default=%default]") 	
     parser.add_option("-o", "--otw", default="sc16",
 		           help="select over the wire data format (sc16 or sc8) [default=%default]")
-    parser.add_option("-R", "--rime", action="store_true", default=False,
-                           help="enable Rime communication stack [default=%default]")
     parser.add_option("-l", "--no-self-loop", action="store_true", default=False,
                            help="enable mechanism of avoiding self-routed packets [default=%default]")
     parser.add_option("", "--source", type="choice", choices=['socket', 'tuntap', 'strobe'], default='tuntap',
@@ -432,7 +410,7 @@ def main(top_block_cls=transceiver_OQPSK_Master):#, options=None):
     parser.add_option("-B", "--beacon-interv", type="eng_float", default=1,
                            help="interval in sec between every beacon transmission [default=%default]")
     parser.add_option("-G", "--spec-dB", type="choice", choices=['local', 'google', 'remote'], default='google',
-                           help="choice of the spectrum database: local dB (on port 5000!) or google dB or on remote host [default=%default]")
+                           help="choice of the spectrum database: local dB or google dB or on remote host [default=%default]")
     parser.add_option("-a", "--remote-dB", default='pwct3.antd.nist.gov',
 			   help="Adress of the remote host of the Spectrum Database, [default=%default]")
     parser.add_option("-y", "--bytes", type="eng_float", default=256,
@@ -442,6 +420,8 @@ def main(top_block_cls=transceiver_OQPSK_Master):#, options=None):
     ## Debugging and Verbose options	
     parser.add_option("", "--debug-MAC", action="store_true", default=False,
                            help="Debugging the MAC Layer [default=%default]")
+    parser.add_option("-W", "--wireshark", action="store_true", default=False,
+                           help="Enable Wireshark capture[default=%default]")
     parser.add_option("-v", "--verbose",action="store_true", default=False, 
 			   help="verbose mode [default=%default]")
     parser.add_option("","--no-usrp", action="store_true", default=False,
@@ -456,20 +436,21 @@ def main(top_block_cls=transceiver_OQPSK_Master):#, options=None):
 
     #tb = transceiver_OQPSK_Master(options.usrp_addr, 
     tb = top_block_cls(options.usrp_addr, 
-			          options.no_usrp, 
-			          options.samp_rate, 
-			          options.lo_offset, 
-			          #options.rime, 
-			          options.otw, 
-			          options.source, 
-			          options.no_self_loop, 
-			          options.debug_MAC)
+		       options.no_usrp, 
+		       options.samp_rate, 
+		       options.lo_offset, 
+		       initialFreq, 
+		       options.otw, 
+		       options.source, 
+		       options.no_self_loop, 
+		       options.debug_MAC,
+		       options.wireshark)
 
     if not options.no_usrp:	
-	tb.set_gain(options.gain)	
+	tb.set_rx_gain(options.rx_gain)	
+	tb.set_tx_gain(options.tx_gain)	
 	tb.set_samp_rate(options.samp_rate*1e6)
-        tb.set_freq(initialFreq)
-	tb.set_lo_offset(options.lo_offset)
+        tb.set_freq(initialFreq, options.lo_offset)
         if VERBOSE:	
     	    print "usrp_addr = ", options.usrp_addr
 	    print " \n Initial frequency: ", tb.get_freq()/1e6, "MHz"
@@ -499,7 +480,6 @@ def main(top_block_cls=transceiver_OQPSK_Master):#, options=None):
     #tun = tunnel(child_conn.fileno(), tun_fd, VERBOSE, options.bytes, options.interval)
     #tun.start()
     
-    #tb.Run(True) 
     tb.start()
     tb.show()
 
