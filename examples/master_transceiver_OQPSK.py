@@ -9,8 +9,8 @@
 # Kill eventual Zombie process
 import subprocess, os, sys
 try:
-        subprocess.call('ps auxw | grep -ie \'listenMaster ncat tee\' | awk \'{print $2}\' | xargs sudo kill -9', shell=True) #FIXME ps -all or ps aux
-        subprocess.call('ps auxw | grep -ie ncat | awk \'{print $2}\' | xargs sudo kill -9', shell=True) #FIXME ps -all or ps aux
+        subprocess.call('ps auxw | grep -ie \'listenMaster ncat tee\' | awk \'{print $2}\' | xargs sudo kill -9', shell=True) 
+        subprocess.call('ps auxw | grep -ie ncat | awk \'{print $2}\' | xargs sudo kill -9', shell=True) 
 except OSError as e:
     print >>sys.stderr, "Execution failed:", e
 
@@ -57,7 +57,7 @@ from gnuradio import qtgui
 
 class transceiver_OQPSK_Master(gr.top_block, Qt.QWidget):
 
-    def __init__(self, addr, no_usrp, rate, lo_offset, initialFreq, otw, source, no_self_loop, debug_MAC, wireshark):
+    def __init__(self, addr, no_usrp, lo_offset, initialFreq, otw, source, no_self_loop, debug_MAC, wireshark):
         gr.top_block.__init__(self, "IEEE 802.15.4m Master Node Transceiver using OQPSK")
         Qt.QWidget.__init__(self)
         self.setWindowTitle("IEEE 802.15.4m Master Node Transceiver using OQPSK")
@@ -86,7 +86,7 @@ class transceiver_OQPSK_Master(gr.top_block, Qt.QWidget):
         ##################################################
         self.addr 	  = addr
 	self.no_usrp	  = no_usrp
-	self.samp_rate	  = rate
+	#self.samp_rate	  = rate
 	self.freq	  = initialFreq
 	self.lo_offset    = lo_offset
 	self.otw	  = otw
@@ -94,29 +94,30 @@ class transceiver_OQPSK_Master(gr.top_block, Qt.QWidget):
 	self.debug_MAC	  = debug_MAC
 	self.source	  = source
 	self.wireshark	  = wireshark
+	self.tx_gain = tx_gain = 0.25
+        self.rx_gain = rx_gain = 0.25
         ##################################################
         # Blocks
         ##################################################
 	if self.no_usrp:
-	   	self.blocks_throttle_0 = blocks.throttle(gr.sizeof_gr_complex*1, self.samp_rate*1e6,True)
+	   	self.blocks_throttle_0 = blocks.throttle(gr.sizeof_gr_complex*1, 4e6,True)
 		## Using files instead of USRPs
 	        self.blocks_file_source_Master = blocks.file_source(gr.sizeof_gr_complex*1, (os.getcwd()+"/utils/masterFileSource"), True)
 	        self.blocks_file_sink_Master = blocks.file_sink(gr.sizeof_gr_complex*1, (os.getcwd()+"/utils/masterFileSink"), False)
 	        self.blocks_file_sink_Master.set_unbuffered(False)
 	else:
 	        ## usrp_source
-	        self.uhd_usrp_source_0 = uhd.usrp_source(",".join((self.addr, "")),
-				        		 stream_args=uhd.stream_args(cpu_format="fc32",
-										     otw_format=self.otw,
-										     channels=range(1),),)
+ 		self.uhd_usrp_source_0 = uhd.usrp_source(",".join((self.addr, "")),
+                					uhd.stream_args(
+                        				cpu_format="fc32",
+                        				channels=range(1),),)
 	        ## usrp_sink
         	self.uhd_usrp_sink_0 = uhd.usrp_sink(",".join((self.addr, "")),
-        	        			     uhd.stream_args(cpu_format="fc32",
-								     otw_format=self.otw,
-        	                				     channels=range(1),),"packet_len",)  
-		# TODO Explain the usage 
-        	self.uhd_usrp_source_0.set_time_now(uhd.time_spec(time.time()), uhd.ALL_MBOARDS)
-                self.uhd_usrp_sink_0.set_time_now(uhd.time_spec(time.time()), uhd.ALL_MBOARDS)
+        	        			    uhd.stream_args(
+        	                		    cpu_format="fc32",
+        	                		    channels=range(1),),)
+		self.uhd_usrp_source_0.set_normalized_gain(rx_gain, 0)
+		self.uhd_usrp_sink_0.set_normalized_gain(tx_gain, 0)
 
         self._tx_gain_range = Range(0, 1, 0.01, 0.75, 200)
         self._tx_gain_win = RangeWidget(self._tx_gain_range, self.set_tx_gain, "tx_gain", "counter_slider", float)
@@ -249,22 +250,25 @@ class transceiver_OQPSK_Master(gr.top_block, Qt.QWidget):
 
     def set_tx_gain(self, tx_gain):
         self.tx_gain = tx_gain
+	self.uhd_usrp_sink_0.set_normalized_gain(self.tx_gain, 0)
 
     def get_rx_gain(self):
         return self.rx_gain
 
     def set_rx_gain(self, rx_gain):
         self.rx_gain = rx_gain
+	self.uhd_usrp_source_0.set_normalized_gain(self.rx_gain, 0)
 
     def get_freq(self):
         return self.freq
 
-    def set_freq(self, freq, lo_offset):
+    def set_freq(self, freq):
         self.freq = freq
-        self.lo_offset = lo_offset
         self._freq_callback(self.freq)
-        self.uhd_usrp_sink_0.set_center_freq(uhd.tune_request(self.freq - self.lo_offset, self.lo_offset), 0)
-        self.uhd_usrp_source_0.set_center_freq(uhd.tune_request(self.freq - self.lo_offset, self.lo_offset), 0)
+	self.uhd_usrp_source_0.set_center_freq(self.freq, 0)
+	self.uhd_usrp_sink_0.set_center_freq(self.freq, 0)
+        #self.uhd_usrp_sink_0.set_center_freq(uhd.tune_request(self.freq - self.lo_offset, self.lo_offset), 0)
+        #self.uhd_usrp_source_0.set_center_freq(uhd.tune_request(self.freq - self.lo_offset, self.lo_offset), 0)
 
     def set_samp_rate(self, rate):	
 	self.rate = rate
@@ -388,12 +392,12 @@ def main(top_block_cls=transceiver_OQPSK_Master):
 
     parser.add_option("-u","--usrp-addr", default="addr = 192.168.10.2",
 			   help="IP address of the USRP without \"addr=\"")
-    parser.add_option("-s", "--samp-rate",type="eng_float", default=4,
-		           help="USRP sampling rate in MHz [default=%default]")
-    parser.add_option("", "--rx-gain",type="eng_float", default=0,
-                           help="set the RX gain of the transceiver [default=%default]")
-    parser.add_option("", "--tx-gain",type="eng_float", default=0,
-                           help="set the TX gain of the transceiver [default=%default]")
+    #parser.add_option("-s", "--samp-rate",type="eng_float", default=4,
+    #    	           help="USRP sampling rate in MHz [default=%default]")
+    #parser.add_option("", "--rx-gain",type="eng_float", default=0,
+    #                       help="set the RX gain of the transceiver [default=%default]")
+    #parser.add_option("", "--tx-gain",type="eng_float", default=0,
+    #                       help="set the TX gain of the transceiver [default=%default]")
     parser.add_option("-f", "--init-freq", type="eng_float", default=716,
 		           help="initial frequency in MHz [default=%default]")
     parser.add_option("", "--lo_offset", type="eng_float", default=0,
@@ -434,7 +438,7 @@ def main(top_block_cls=transceiver_OQPSK_Master):
     #tb = transceiver_OQPSK_Master(options.usrp_addr, 
     tb = top_block_cls(options.usrp_addr, 
 		       options.no_usrp, 
-		       options.samp_rate, 
+		       #options.samp_rate, 
 		       options.lo_offset, 
 		       initialFreq, 
 		       options.otw, 
@@ -444,10 +448,11 @@ def main(top_block_cls=transceiver_OQPSK_Master):
 		       options.wireshark)
 
     if not options.no_usrp:	
-	tb.set_rx_gain(options.rx_gain)	
-	tb.set_tx_gain(options.tx_gain)	
-	tb.set_samp_rate(options.samp_rate*1e6)
-        tb.set_freq(initialFreq, options.lo_offset)
+	#tb.set_rx_gain(options.rx_gain)	
+	#tb.set_tx_gain(options.tx_gain)	
+	tb.set_samp_rate(4e6)
+	#tb.set_freq(initialFreq, options.lo_offset)
+	tb.set_freq(initialFreq)
         if VERBOSE:	
     	    print "usrp_addr = ", options.usrp_addr
 	    print " \n Initial frequency: ", tb.get_freq()/1e6, "MHz"
