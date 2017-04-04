@@ -54,8 +54,6 @@ from mac import * #FIXME
 import pmt
 import sip
 
-
-
 class broadcastScript():
 
     def __init__(self, myWord, myPort, mySlot, myInterval):
@@ -83,7 +81,7 @@ class broadcastScript():
 
 class transceiver_OQPSK_Slave(gr.top_block, Qt.QWidget):
 
-    def __init__(self, addr, no_usrp, lo_offset, initialFreq, otw, source, no_self_loop, debug_MAC, wireshark):
+    def __init__(self, addr, no_usrp, initialFreq, otw, source, no_self_loop, debug_MAC, wireshark):
         gr.top_block.__init__(self, "IEEE 802.15.4m Slave Node Transceiver using OQPSK")
         Qt.QWidget.__init__(self)
         self.setWindowTitle("IEEE 802.15.4m Slave Node Transceiver using OQPSK")
@@ -113,7 +111,6 @@ class transceiver_OQPSK_Slave(gr.top_block, Qt.QWidget):
         self.addr 	  = addr
 	self.no_usrp	  = no_usrp
 	self.freq	  = initialFreq
-	self.lo_offset    = lo_offset
 	self.otw	  = otw
         self.no_self_loop = no_self_loop	
 	self.debug_MAC	  = debug_MAC
@@ -219,7 +216,7 @@ class transceiver_OQPSK_Slave(gr.top_block, Qt.QWidget):
         self._freq_callback = lambda i: Qt.QMetaObject.invokeMethod(self._freq_combo_box, "setCurrentIndex", Qt.Q_ARG("int", self._freq_options.index(i)))
         self._freq_callback(self.freq)
         self._freq_combo_box.currentIndexChanged.connect(
-        	lambda i: self.set_freq(self._freq_options[i],lo_offset))
+        	lambda i: self.set_freq(self._freq_options[i]))
 
         self.top_layout.addWidget(self._freq_tool_bar)
 
@@ -301,16 +298,11 @@ class transceiver_OQPSK_Slave(gr.top_block, Qt.QWidget):
         self._freq_callback(self.freq)
 	self.uhd_usrp_source_0.set_center_freq(self.freq, 0)
         self.uhd_usrp_sink_0.set_center_freq(self.freq, 0)
-        #self.uhd_usrp_sink_0.set_center_freq(uhd.tune_request(self.freq - self.lo_offset, self.lo_offset), 0)
-        #self.uhd_usrp_source_0.set_center_freq(uhd.tune_request(self.freq - self.lo_offset, self.lo_offset), 0)
 
     def set_samp_rate(self, rate):	
 	self.rate = rate
 	self.uhd_usrp_source_0.set_samp_rate(self.rate)
 	self.uhd_usrp_sink_0.set_samp_rate(self.rate)
-
-    def get_lo_offset(self):
-        return self.lo_offset
 
 def generator(size=56, chars=string.ascii_uppercase + string.digits):
     return ''.join(random.choice(chars) for _ in range(size))
@@ -328,7 +320,7 @@ def sync(no_usrp, tunnel, scan, dwell, slot, period, interval):
 #  	    print ("All available frequencies have been scanned. \n ...Looping again ")
 #  	    i = 1
 #	print "\n Trying frequency:", frequencies[i]/1e6, "MHz. Retuning ..."
-#	tb.set_freq(frequencies[i], tb.lo_offset) 
+#	tb.set_freq(frequencies[i]) 
     with open("utils/listenSlave", "r") as flistenSlave:	
           time.sleep(dwell)
           for line in flistenSlave:
@@ -389,16 +381,8 @@ def main(top_block_cls=transceiver_OQPSK_Slave):
 
     parser.add_option("-u","--usrp-addr", default="addr = 192.168.10.2",
 			   help="IP address of the USRP without \"addr=\"")
-    #parser.add_option("-s", "--samp-rate",type="eng_float", default=4,
-    #    	           help="USRP sampling rate in MHz [default=%default]")
-    #parser.add_option("", "--rx-gain",type="eng_float", default=0,
-    #                       help="set the RX gain of the transceiver [default=%default]")
-    #parser.add_option("", "--tx-gain",type="eng_float", default=0,
-    #                       help="set the TX gain of the transceiver [default=%default]")
     parser.add_option("-f", "--init-freq", type="eng_float", default=174,
 		           help="initial frequency in MHz [default=%default]")
-    parser.add_option("", "--lo_offset", type="eng_float", default=0,
-                           help="Local Oscillator frequency in MHz [default=%default]") 	
     parser.add_option("-o", "--otw", default="sc16",
 		           help="select over the wire data format (sc16 or sc8) [default=%default]")
     parser.add_option("-l", "--no-self-loop", action="store_true", default=False,
@@ -444,8 +428,6 @@ def main(top_block_cls=transceiver_OQPSK_Slave):
     open('utils/listenSlave', 'w').close()
     tb = top_block_cls(options.usrp_addr, 
 		       options.no_usrp, 
-		       #options.samp_rate, 
-		       options.lo_offset, 
 		       initialFreq, 
 		       options.otw, 
 		       options.source, 
@@ -455,13 +437,9 @@ def main(top_block_cls=transceiver_OQPSK_Slave):
 
     if not options.no_usrp:	
 	from gnuradio import uhd, digital
-	#tb.set_rx_gain(options.rx_gain)
-	#tb.set_tx_gain(options.tx_gain)
 	tb.set_samp_rate(4e6)
-    	#tb.set_freq(initialFreq, options.lo_offset) # initial frequency
     	tb.set_freq(initialFreq)
     	print "\n Initial frequency: ", tb.get_freq()/1e6, "MHz"
-	print " Local Oscillator offset: ", tb.get_lo_offset()/1e6, "MHz \n"
 
     subp_listenSlave = subprocess.Popen("xterm -hold -e \"ncat -u -l -p 3333 | tee utils/listenSlave\"",  shell=True)
 
