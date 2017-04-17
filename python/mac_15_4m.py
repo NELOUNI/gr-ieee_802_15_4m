@@ -29,13 +29,13 @@ from gnuradio import gr
 import pmt, time, socket
 import subprocess, os, sys, string, random
 
-class mac(gr.sync_block): 
+class mac_15_4m(gr.sync_block): 
   def __init__(self, debug, no_self_loop):
 	global d_msg_len, d_mac_id, d_seq_nr, d_msg
 
         gr.sync_block.__init__(
 		               self,
-		               name = "mac",
+		               name = "mac_15_4m",
 		               in_sig = None,
 		               out_sig = None
 			      )
@@ -50,33 +50,33 @@ class mac(gr.sync_block):
 	if self.no_self_loop:
 		random.seed(os.getpid())	    	
 		d_mac_id = random.randint(1, 100)     	   	
-	self.message_port_register_in(pmt.intern('phy in'))
-        self.set_msg_handler(pmt.intern('phy in'), self.phy_in)
+	self.message_port_register_in(pmt.intern('pdu in'))
+        self.set_msg_handler(pmt.intern('pdu in'), self.pdu_in)
 
 	self.message_port_register_in(pmt.intern('app in'))
         self.set_msg_handler(pmt.intern('app in'), self.app_in)
 
 	self.message_port_register_out(pmt.intern('app out'))
-	self.message_port_register_out(pmt.intern('phy out'))
+	self.message_port_register_out(pmt.intern('pdu out'))
 
-  def phy_in(self, msg): # consume messages
+  def pdu_in(self, msg): # consume messages
 	global d_mac_id
 
 	if self.debug: print "****************************** \nConsuming messages...\n******************************** "
 	data = 0
 	if(pmt.is_eof_object(msg)):
-                self.message_port_pub(pmt.intern('phy out'), pmt.PMT_EOF)
+                self.message_port_pub(pmt.intern('pdu out'), pmt.PMT_EOF)
 		return
 	elif(pmt.is_pair(msg)): 
 		#if self.debug: print  "pmt_is_pair" 
 		data = pmt.cdr(msg)					
 	elif(pmt.is_bool(msg)):
-                if self.debug: print  "mac.py:phy in: got a busy notification" 
+                if self.debug: print  "mac.py:pdu in: got a busy notification" 
 		return
 	data_len = pmt.length(data) 
 	if self.debug:
 		print ""
-		print "Data received from Physical Layer: ", pmt.u8vector_elements(data)
+		print "Data received from pdusical Layer: ", pmt.u8vector_elements(data)
 		print ""	
 	if (data_len < 13): 
 		if self.debug: 	print  "MAC: frame too short. Dropping! \n"
@@ -161,7 +161,7 @@ class mac(gr.sync_block):
 	    pmt.u8vector_set(generatedMacPayload, i, d_msg[i]) 	
 	    #else: pmt.u8vector_set(generatedMacPayload, i, d_msg[i]) 	
 
-	self.message_port_pub(pmt.intern("phy out"), pmt.cons(pmt.PMT_NIL, generatedMacPayload))
+	self.message_port_pub(pmt.intern("pdu out"), pmt.cons(pmt.PMT_NIL, generatedMacPayload))
 	#Print 
 	#Print "**********************************"
 	#Print

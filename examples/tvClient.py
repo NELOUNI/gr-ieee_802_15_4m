@@ -41,7 +41,7 @@ if __name__ == '__main__':
 
 	c.setopt(pycurl.SSL_VERIFYPEER, 1)
 	c.setopt(pycurl.SSL_VERIFYHOST, 2)
-        if (os.path.isfile('../utils/keys/rsa.crt')):
+        if (os.path.isfile('utils/keys/rsa.crt')):
            try:
 		c.setopt(pycurl.CAINFO, "utils/keys/rsa.crt")
            except OSError as e:

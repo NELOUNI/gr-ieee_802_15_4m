@@ -1,1 +1,2 @@
-python ../../WSDB/webServerWSDB.py -s
+cd WSDB && python webServerWSDB.py -s &  
+echo $! > .wsdb.pid

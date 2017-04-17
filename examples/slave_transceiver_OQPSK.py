@@ -9,8 +9,8 @@
 # Kill eventual Zombie process
 import subprocess, os, sys
 try:
-        subprocess.call('ps auxw | grep -ie \'listenSlave ncat tee\' | awk \'{print $2}\' | xargs sudo kill -9', shell=True) 
-        subprocess.call('ps auxw | grep -ie ncat | awk \'{print $2}\' | xargs sudo kill -9', shell=True) 
+        subprocess.call('ps auxw | grep -ie \'listenSlave\' | awk \'{print $2}\' | xargs sudo kill -9', shell=True) 
+#        subprocess.call('ps auxw | grep -ie ncat | awk \'{print $2}\' | xargs sudo kill -9', shell=True) 
 except OSError as e:
     print >>sys.stderr, "Execution failed:", e
 
@@ -33,7 +33,8 @@ import json, pycurl, StringIO, time, select, psutil, atexit
 import threading, signal, string, socket, random, struct, fcntl
 import webServerWSDB
 from fcntl import ioctl
-from mac import *
+import mac_15_4m
+from mac_15_4m import *
 from packet import Packet
 import TVWS_channelmap
 from PyQt4 import Qt
@@ -50,7 +51,6 @@ from optparse import OptionParser
 import foo
 import ieee802_15_4
 import ieee802_11 #FIXME
-from mac import * #FIXME
 import pmt
 import sip
 
@@ -201,8 +201,8 @@ class transceiver_OQPSK_Slave(gr.top_block, Qt.QWidget):
         self.ieee802_15_4_rime_stack_0 = ieee802_15_4.rime_stack(([129]), ([131]), ([132]), ([23,42]))
 	self.ieee802_15_4_oqpsk_phy_0 = ieee802_15_4_oqpsk_phy()
         # 802.15.4m MAC layer #
-        self.ieee802_15_4_mac_0 = ieee802_15_4.mac(True)
-        #self.ieee802_15_4_mac_0 = mac(self.debug_MAC, self.no_self_loop)
+        #self.ieee802_15_4_mac_0 = ieee802_15_4.mac(True)
+        self.ieee802_15_4_mac_0 = mac_15_4m(self.debug_MAC, self.no_self_loop)
         # Ethernet Encapsulation #TODO explain its usage, Specific to 802.11 ? 
         self.ieee802_11_ether_encap_0 = ieee802_11.ether_encap(True)
 
@@ -224,7 +224,7 @@ class transceiver_OQPSK_Slave(gr.top_block, Qt.QWidget):
         # Asynch Message Connections
         ##################################################
 	if self.source == "tuntap": # Tuntap Block to quantify the achievable throughput
-        	self.blocks_tuntap_pdu_0 = blocks.tuntap_pdu("tap0", 440)
+        	self.blocks_tuntap_pdu_0 = blocks.tuntap_pdu("tap1", 440)
         	self.msg_connect(self.ieee802_11_ether_encap_0, "to tap", self.blocks_tuntap_pdu_0, "pdus")
         	self.msg_connect(self.blocks_tuntap_pdu_0, "pdus", self.ieee802_11_ether_encap_0, "from tap")
 
@@ -314,13 +314,13 @@ def sync(no_usrp, tunnel, scan, dwell, slot, period, interval):
 
     data = generator()	
     gotSync = False
-#    if not no_usrp:
-#  	#if (i == len(Lines)):
-#  	if (i == len(frequencies)):
-#  	    print ("All available frequencies have been scanned. \n ...Looping again ")
-#  	    i = 1
-#	print "\n Trying frequency:", frequencies[i]/1e6, "MHz. Retuning ..."
-#	tb.set_freq(frequencies[i]) 
+    if not no_usrp:
+  	#if (i == len(Lines)):
+  	if (i == len(frequencies)):
+  	    print ("All available frequencies have been scanned. \n ...Looping again ")
+  	    i = 1
+	print "\n Trying frequency:", frequencies[i]/1e6, "MHz. Retuning ..."
+	tb.set_freq(frequencies[i]) 
     with open("utils/listenSlave", "r") as flistenSlave:	
           time.sleep(dwell)
           for line in flistenSlave:
@@ -329,21 +329,21 @@ def sync(no_usrp, tunnel, scan, dwell, slot, period, interval):
                                 gotSync = True
 				actualFreq = frequencies[i]
     flistenSlave.close()
-#    i += 1
-#    if (gotSync == False):
-#        threading.Timer(scan,sync, [no_usrp, tunnel, scan, dwell, slot, period, interval]).start()
-#    if (gotSync == True):
-#	print "ActualFreq = ", actualFreq, "\n"
-#	subp_listenSlave.kill()
-#	if (tunnel):	tun.run()
-#	else:		broadcastScript(generator(),port,slot, interval)
-#	threading.Timer(period, periodCheck, [no_usrp, tunnel, scan, dwell, slot, period, interval]).start()	
+    i += 1
+    if (gotSync == False):
+        threading.Timer(scan,sync, [no_usrp, tunnel, scan, dwell, slot, period, interval]).start()
+    if (gotSync == True):
+	print "ActualFreq = ", actualFreq, "\n"
+	subp_listenSlave.kill()
+	if (tunnel):	tun.run()
+	else:		broadcastScript(generator(),port,slot, interval)
+	threading.Timer(period, periodCheck, [no_usrp, tunnel, scan, dwell, slot, period, interval]).start()	
 
 def periodCheck(no_usrp, tunnel, scan, dwell, slot, period, interval):
 
    global i, port, tun
-  # subp_periodListen = subprocess.Popen("utils/listenSlave.sh")#,  shell=True)
-   subp_listenSlave = subprocess.Popen('ncat -u -l -p 3333 | tee utils/listenSlave')#, shell=True) 
+   #subp_listenSlave = subprocess.Popen('ncat -u -l -p 3333 | tee utils/listenSlave', shell=True) 
+   subp_periodListen = subprocess.Popen('ncat -u -l -p 3333 > utils/listenSlave', shell=True) 
    gotBeacon = False	
    with open("utils/listenSlave", "r") as flistenSlave:	
           time.sleep(dwell)
@@ -351,7 +351,7 @@ def periodCheck(no_usrp, tunnel, scan, dwell, slot, period, interval):
                         if ('BBBBBBBB' in line):
                                 print "\n \nGot beacon...\nKeep trasmitting for another 1 minute...\n\n"
                                 gotBeacon = True
-				subp_periodListen.kill() 
+        			subp_periodListen.kill() 
    flistenSlave.close()	
    if gotBeacon:
 	if (tunnel):	tun.run()
@@ -361,7 +361,8 @@ def periodCheck(no_usrp, tunnel, scan, dwell, slot, period, interval):
 	i = 1	
 	print "\n\nConnection Lost...\nSynching again...."	
 	subp_periodListen.kill() 
-	subp_listenSlave = subprocess.Popen('ncat -u -l -p 3333 | tee utils/listenSlave')#, shell=True) 
+	#subp_listenSlave = subprocess.Popen('ncat -u -l -p 3333 | tee utils/listenSlave', shell=True) 
+	subp_periodListen = subprocess.Popen('ncat -u -l -p 3333 > utils/listenSlave', shell=True) 
 	threading.Timer(period,sync,[no_usrp, tunnel, scan, dwell, slot, period, interval]).start() 
 
 
@@ -385,7 +386,7 @@ def main(top_block_cls=transceiver_OQPSK_Slave):
 		           help="initial frequency in MHz [default=%default]")
     parser.add_option("-o", "--otw", default="sc16",
 		           help="select over the wire data format (sc16 or sc8) [default=%default]")
-    parser.add_option("-l", "--no-self-loop", action="store_true", default=False,
+    parser.add_option("-l", "--no-self-loop", action="store_false", default=True,
                            help="enable mechanism of avoiding self-routed packets [default=%default]")
     parser.add_option("", "--source", type="choice", choices=['socket', 'tuntap', 'strobe'], default='tuntap',
                            help="'tuntap' interface, 'socket' or 'strobe' [default=%default]")  
@@ -437,15 +438,15 @@ def main(top_block_cls=transceiver_OQPSK_Slave):
 
     if not options.no_usrp:	
 	from gnuradio import uhd, digital
+    	print "\n Initial frequency: ", initialFreq/1e6, "MHz"
 	tb.set_samp_rate(4e6)
     	tb.set_freq(initialFreq)
-    	print "\n Initial frequency: ", tb.get_freq()/1e6, "MHz"
 
-    subp_listenSlave = subprocess.Popen("xterm -hold -e \"ncat -u -l -p 3333 | tee utils/listenSlave\"",  shell=True)
+    subp_listenSlave = subprocess.Popen("ncat -u -l -p 3333 > utils/listenSlave",  shell=True)
 
     if options.source == "tuntap": 
     	try:
-    	    subprocess.call("sudo ifconfig tap0 192.168.200.2", shell=True)
+    	    subprocess.call("sudo ifconfig tap1 192.168.200.2", shell=True)
     	except OSError as e:
     	    print "Execution failed: ", e
    	
@@ -566,8 +567,17 @@ def open_tun_interface(tun_device_filename):
 #            print "Exitting LOOP !!"
 
 if __name__ == '__main__':
-   try:
-        main()
-   except KeyboardInterrupt:
-	os.remove(utils/listenSlave)
+  os.setpgrp() # create new process group, become its leader
+  try:
+    main()
+  except KeyboardInterrupt:
+	subprocess.Popen('ps auxw | grep -ie \'slave_transceiver_OQPSK.py\' | awk \'{print $2}\' | xargs sudo kill -', shell=True)
+	subprocess.Popen('sudo ip link delete tap1', shell=True)
+        print "Bye"
         sys.exit(0)
+  finally:
+	try:
+	    os.remove("utils/listenSlave")
+	except OSError:
+	    pass
+	    os.killpg(0, signal.SIGKILL) # kill all processes in my group

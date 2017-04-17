@@ -82,8 +82,8 @@ def main():
 	     	 fupdatedSpectrumdB.write(line)	
 	     else:	 	
 	         fupdatedSpectrumdB.write(''.join([line.strip('\n'), " ", used]))
-      #fspectrumdB.close()
-      #fupdatedSpectrumdB.close()	    
+      fspectrumdB.close()
+      fupdatedSpectrumdB.close()	    
       os.rename('updatedSpectrumdB','spectrumdB')
       return redirect(url_for('update'))
 

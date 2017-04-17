@@ -3,6 +3,8 @@ import sys, json, StringIO, time, datetime, os, shutil, errno
 from gnuradio import eng_notation
 from gnuradio.eng_option import eng_option
 from optparse import OptionParser
+import TVWS_channelmap, random
+
 sys.path.append(os.getcwd())
 app = Flask(__name__)
 
@@ -30,18 +32,6 @@ def login():
             return redirect(url_for('update'))
     return render_template('login.html', error=error)
 
-def copyanything(src, dst):
-    try:
-        shutil.copytree(src, dst)
-    except OSError as exc: # python >2.5
-        if exc.errno == errno.ENOTDIR:
-            shutil.copy(src, dst)
-        else: raise
-
-def init_db():
-    """Creates the database tables."""
-    copyanything('spectrumdB.back','spectrumdB')
-
 @app.route('/logout')
 def logout():
     session.pop('logged_in', None)
@@ -53,38 +43,29 @@ def main():
   global availableFreqs
   global usedFreqs
 
-  availableFreqs = ''
-  usedFreqs = ''
-  
-  fspectrumdB = open("spectrumdB", )
-  for i, line in enumerate(fspectrumdB):
-    if i == 0:
-       availableFreqs = (line.split(": ")[1:][0]).split()
-    elif i == 1:
-       usedFreqs = (line.split(": ")[1:][0]).split()	
-       break	
-  fspectrumdB.close()
+  CE_channels_indices = (36, 37, 38, 39, 40, 41, 42, 43, 44)
+  TVWS_CE_channels = {x: TVWS_channelmap.Channels[x] for x in CE_channels_indices}
+  AllFreqs = [x * 1e6 for x in (TVWS_channelmap.Channels).values()]
+  usedFreqs = random.sample(AllFreqs, 5)
+  availableFreqs = [freq for freq in AllFreqs if freq not in usedFreqs]
 
   if 'usedFreq:' in request.data:
       used = request.data.strip('usedFreq: ')
-      print "used: ", used 	
-      fspectrumdB        = open("spectrumdB", "r+")
-      fupdatedSpectrumdB = open("updatedSpectrumdB", "w+")	 
-      for i, line in enumerate(fspectrumdB):
-    	  if i == 0:
-	     if used in line:
-		 fupdatedSpectrumdB.write(line.replace(used,''))
-             else:
-	     	 fupdatedSpectrumdB.write(line)	
-    	  elif i == 1:
-             if used in line:
-		 line.replace(used,'')		
-	     	 fupdatedSpectrumdB.write(line)	
-	     else:	 	
-	         fupdatedSpectrumdB.write(''.join([line.strip('\n'), " ", used]))
-      #fspectrumdB.close()
-      #fupdatedSpectrumdB.close()	    
-      os.rename('updatedSpectrumdB','spectrumdB')
+      used_MHZ = float(used) * 1e6
+      print "TV Broadcast incumbent using: ", used_MHZ
+      availableFreqs.remove(used_MHZ) 
+#      for i, line in enumerate(fspectrumdB):
+#    	  if i == 0:
+#	     if used in line:
+#		 fupdatedSpectrumdB.write(line.replace(used,''))
+#             else:
+#	     	 fupdatedSpectrumdB.write(line)	
+#    	  elif i == 1:
+#             if used in line:
+#		 line.replace(used,'')		
+#	     	 fupdatedSpectrumdB.write(line)	
+#	     else:	 	
+#	         fupdatedSpectrumdB.write(''.join([line.strip('\n'), " ", used]))
       return redirect(url_for('update'))
 
   elif 'jsonrpc' in request.data:
@@ -165,16 +146,6 @@ def main():
 def update():
   global availableFreqs
   global usedFreqs	
-  availableFreqs = ''
-  usedFreqs = ''
- 	
-  fspectrumdB = open("spectrumdB")
-  for i, line in enumerate(fspectrumdB):
-    if i == 0:
-       availableFreqs = (line.split(": ")[1:][0]).split()
-    elif i == 1:
-       usedFreqs = (line.split(": ")[1:][0]).split()	
-  fspectrumdB.close()
   return render_template('main.html', myAvailable=availableFreqs , myUsed=usedFreqs)
 
 if __name__ == '__main__':
@@ -184,8 +155,6 @@ if __name__ == '__main__':
     parser.add_option("-s","--ssl", action="store_true", default=False,
                            help="Use of SSL Encryption")
     (options, args) = parser.parse_args()
-
-    init_db()
     if not options.ssl:
 	print "Running without SSL Encryption"
         app.run(host='0.0.0.0', port=options.port)

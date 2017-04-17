@@ -6,7 +6,6 @@
 # Generated: Tue Mar 21 16:13:54 2017
 ##################################################
 
-# Kill eventual Zombie process
 import subprocess, os, sys
 try:
         subprocess.call('ps auxw | grep -ie \'listenMaster ncat tee\' | awk \'{print $2}\' | xargs sudo kill -9', shell=True) 
@@ -34,7 +33,8 @@ import json, pycurl, StringIO, time, select, psutil
 import threading, signal, string, socket, random, struct, fcntl
 import webServerWSDB
 from fcntl import ioctl
-from mac import *
+import mac_15_4m
+from mac_15_4m import *
 from packet import Packet
 import TVWS_channelmap
 from PyQt4 import Qt
@@ -170,8 +170,8 @@ class transceiver_OQPSK_Master(gr.top_block, Qt.QWidget):
         self.ieee802_15_4_rime_stack_0 = ieee802_15_4.rime_stack(([129]), ([131]), ([132]), ([23,42]))
 	self.ieee802_15_4_oqpsk_phy_0 = ieee802_15_4_oqpsk_phy()
         # 802.15.4m MAC layer #
-        self.ieee802_15_4_mac_0 = ieee802_15_4.mac(True)
-        #self.ieee802_15_4_mac_0 = mac(self.debug_MAC, self.no_self_loop)
+        #self.ieee802_15_4_mac_0 = ieee802_15_4.mac(True)
+        self.ieee802_15_4_mac_0 = mac_15_4m(self.debug_MAC, self.no_self_loop)
         # Ethernet Encapsulation #TODO explain its usage, Specific to 802.11 ? 
         self.ieee802_11_ether_encap_0 = ieee802_11.ether_encap(True)
 
@@ -345,7 +345,7 @@ def process(no_usrp, beacon_interv, spec_dB, remote_dB):
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     #Sending loop
     while True:
-	beacon = beacon + (size - len(beacon)) * " " 
+	#beacon = beacon + (size - len(beacon)) * " " 
         print "Sending beacon: ", beacon
     	s.sendto(beacon, ("localhost", int(port)))    
 	#tun.run()
@@ -389,7 +389,7 @@ def main(top_block_cls=transceiver_OQPSK_Master):
 		           help="initial frequency in MHz [default=%default]")
     parser.add_option("-o", "--otw", default="sc16",
 		           help="select over the wire data format (sc16 or sc8) [default=%default]")
-    parser.add_option("-l", "--no-self-loop", action="store_true", default=False,
+    parser.add_option("-l", "--no-self-loop", action="store_false", default=True,
                            help="enable mechanism of avoiding self-routed packets [default=%default]")
     parser.add_option("", "--source", type="choice", choices=['socket', 'tuntap', 'strobe'], default='tuntap',
                            help="'tuntap' interface, 'socket' or 'strobe' [default=%default]")  
@@ -438,29 +438,31 @@ def main(top_block_cls=transceiver_OQPSK_Master):
     actualFreq = initialFreq	
     word = "FFFFFFFF"
     port = 52002
-    subp_ListenMaster =  subprocess.Popen('ncat -u -l -p 3334 | tee utils/listenMaster', shell=True)
+    subp_ListenMaster =  subprocess.Popen('ncat -u -l -p 3334 > utils/listenMaster', shell=True)
 
     if options.source == "tuntap":
 	try:
-	    subprocess.call("sudo ifconfig tap0 192.168.200.1", shell=True)
+	    subprocess.call("sudo ifconfig tap0 192.168.100.1", shell=True)
 	except OSError as e:
 	    print "Execution failed: ", e
 
     #try :    
-    #   #     subprocess.call("""sudo tunctl -d gr3 -f /dev/net/tun
-    #   #                        sudo tunctl -t gr3 -u $USER -f /dev/net/tun 
-    #                           sudo ip addr add 10.0.0.9/24 dev gr3
-    #                           sudo ip link set gr3 up""", shell=True)
+    #        subprocess.call("""sudo tunctl -d tap0 -f /dev/net/tun
+    #                           sudo tunctl -t tap0 -u $USER -f /dev/net/tun 
+    #                           sudo ip addr add 10.0.0.9/24 dev tap0
+    #                           sudo ip link set tap0 up""", shell=True)
     #
     #except OSError as e:
     #        print >>sys.stderr, "Execution failed:", e
+
     threading.Timer(2, process, (options.no_usrp, options.beacon_interv, options.spec_dB, options.remote_dB)).start()	
    	
     ## open the TUN/TAP interface
     #tun_fd = open_tun_interface("/dev/net/tun")
 
     #parent_conn, child_conn = Pipe()
-    #tun = tunnel(child_conn.fileno(), tun_fd, VERBOSE, options.bytes, options.interval)
+    ##tun = tunnel(child_conn.fileno(), tun_fd, VERBOSE, options.bytes, options.interval)
+    #tun = tunnel(child_conn.fileno(), VERBOSE, options.bytes, options.interval)
     #tun.start()
     
     tb.start()
@@ -472,19 +474,20 @@ def main(top_block_cls=transceiver_OQPSK_Master):
     qapp.connect(qapp, Qt.SIGNAL("aboutToQuit()"), quitting)
     qapp.exec_()
 
-def open_tun_interface(tun_device_filename):
-            
-       	tun = os.open(tun_device_filename, os.O_RDWR)
-        return tun
+#def open_tun_interface(tun_device_filename):
+#            
+#       	tun = os.open(tun_device_filename, os.O_RDWR)
+#        return tun
 
 class tunnel(threading.Thread):
 
-    def __init__ (self, myPipe, tun_interface, verbose, bytes, interval):
-
+    #def __init__ (self, myPipe, tun_interface, verbose, bytes, interval):	
+    def __init__ (self, myPipe, verbose, bytes, interval):	
+	print "TEST Tunnel"
 	threading.Thread.__init__(self)
 
 	self.verbose 	   = verbose 
-        self.tun_interface = tun_interface
+        #self.tun_interface = tun_interface
 	self.bytes	   = bytes
         self.interval	   = interval
 	
@@ -547,5 +550,17 @@ class tunnel(threading.Thread):
             print "Exitting LOOP !!"
     
 if __name__ == '__main__':
+  os.setpgrp() # create new process group, become its leader
+  try:
     main()
-
+  except KeyboardInterrupt:
+	subprocess.Popen('ps auxw | grep -ie \'master_transceiver_OQPSK.py\' | awk \'{print $2}\' | xargs sudo kill -', shell=True) 
+	subprocess.Popen('sudo ip link delete tap0', shell=True)
+        print "Bye"
+        sys.exit()
+  finally:
+	try:
+		os.remove("utils/listenMaster")	
+	except OSError:
+		pass	
+	#os.killpg(0, signal.SIGKILL) # kill all processes in my group
