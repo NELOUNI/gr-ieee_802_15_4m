@@ -1,8 +1,7 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-import os, subprocess
-#subprocess.Popen("sudo xauth add $(xauth -f ~/.Xauthority list|tail -1)", shell=True) 
+import os, subprocess, netifaces
 from PyQt4 import QtGui, QtCore
 
 class main_GUI(QtGui.QWidget):
@@ -16,6 +15,7 @@ class main_GUI(QtGui.QWidget):
 
 	self.col = QtGui.QColor(0, 0, 0)
 
+	print "cwd = os.getcwd():", os.getcwd()
 	exitAction = QtGui.QAction(QtGui.QIcon('exit.png'), '&Exit', self)        
         exitAction.setShortcut('Ctrl+Q')
         exitAction.setStatusTip('Exit application')
@@ -109,8 +109,7 @@ class main_GUI(QtGui.QWidget):
 	    print "\n#####################"
 	    print " Turning WSDB OFF ... "
 	    print "#######################"
-    	    #subprocess.Popen("cat .wsdb.pid | xargs sudo kill -9 && rm .wsdb.pid", shell=True) 
-	    subprocess.call('ps auxw | grep -ie \'webServerWSDB.py\' | awk \'{print $2}\' | xargs sudo kill -9', shell=True)
+	    subprocess.Popen('ps auxw | grep -ie \'webServerWSDB.py\' | awk \'{print $2}\' | xargs sudo kill -9', shell=True)
 
     def handle_master(self, pressed):
         if pressed:
@@ -118,13 +117,16 @@ class main_GUI(QtGui.QWidget):
 	    print "\n######################################"
 	    print " Turning 802.15.4m Master Node ON ... "
 	    print "######################################"
-	    subprocess.Popen("master.sh", shell=True)
+	    subprocess.Popen("./master.sh", shell=True)
+	    
         else:	
 	    self.master.setText('Master OFF')
 	    print "\n######################################"
 	    print " Turning 802.15.4m Master Node OFF ... "
 	    print "######################################"
-	    subprocess.call('ps auxw | grep -ie \'master_transceiver_OQPSK.py\' | awk \'{print $2}\' | xargs sudo kill -9', shell=True)
+	    subprocess.Popen('ps auxw | grep -ie \'master_transceiver_OQPSK.py\' | awk \'{print $2}\' | xargs sudo kill -9', shell=True)
+	    if "tap0" in netifaces.interfaces():
+		subprocess.Popen('sudo ip link delete tap0', shell=True)
 
     def handle_slave(self, pressed):
         if pressed:
@@ -132,14 +134,15 @@ class main_GUI(QtGui.QWidget):
 	    print "\n######################################"
 	    print " Turning 802.15.4m Slave Node ON ... "
 	    print "######################################"
-	    subprocess.Popen("slave.sh", shell=True)
+	    subprocess.Popen("./slave.sh", shell=True)
         else:	
 	    self.slave.setText('Slave OFF')
 	    print "\n#####################################"
 	    print " Turning 802.15.4m Slave Node OFF ... "
 	    print "######################################"
-    	    subprocess.Popen("cat .slave.pid | xargs sudo kill -9 && rm .slave.pid", shell=True) 
-	    subprocess.call('ps auxw | grep -ie \'slave_transceiver_OQPSK.py\' | awk \'{print $2}\' | xargs sudo kill -9', shell=True)
+	    subprocess.Popen('ps auxw | grep -ie \'slave_transceiver_OQPSK.py\' | awk \'{print $2}\' | xargs sudo kill -9', shell=True)
+	    if "tap1" in netifaces.interfaces():
+	    	subprocess.Popen('sudo ip link delete tap1', shell=True)
 
     def center(self):
         frameGm = self.frameGeometry()

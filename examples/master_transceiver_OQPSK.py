@@ -9,7 +9,7 @@
 import subprocess, os, sys
 try:
         subprocess.call('ps auxw | grep -ie \'listenMaster ncat tee\' | awk \'{print $2}\' | xargs sudo kill -9', shell=True) 
-        subprocess.call('ps auxw | grep -ie ncat | awk \'{print $2}\' | xargs sudo kill -9', shell=True) 
+	subprocess.Popen('sudo ip link delete tap0', shell=True)
 except OSError as e:
     print >>sys.stderr, "Execution failed:", e
 
@@ -416,7 +416,6 @@ def main(top_block_cls=transceiver_OQPSK_Master):
     (options, args) = parser.parse_args()
 
     getAck	= False
-    VERBOSE 	= options.verbose
     usrp_addr   = "addr="+options.usrp_addr
     initialFreq	= 1e6 * float(options.init_freq)
 
@@ -432,7 +431,7 @@ def main(top_block_cls=transceiver_OQPSK_Master):
     if not options.no_usrp:	
 	tb.set_samp_rate(4e6)
 	tb.set_freq(initialFreq)
-        if VERBOSE:	
+        if options.verbose:	
     	    print "usrp_addr = ", options.usrp_addr
 	    print " \n Initial frequency: ", tb.get_freq()/1e6, "MHz"
     actualFreq = initialFreq	
@@ -440,30 +439,28 @@ def main(top_block_cls=transceiver_OQPSK_Master):
     port = 52002
     subp_ListenMaster =  subprocess.Popen('ncat -u -l -p 3334 > utils/listenMaster', shell=True)
 
-    if options.source == "tuntap":
-	try:
-	    subprocess.call("sudo ifconfig tap0 192.168.100.1", shell=True)
-	except OSError as e:
-	    print "Execution failed: ", e
+#    if options.source == "tuntap":
+#	try:
+#	    subprocess.call("sudo ifconfig tap0 192.168.100.1", shell=True)
+#	except OSError as e:
+#	    print "Execution failed: ", e
 
-    #try :    
-    #        subprocess.call("""sudo tunctl -d tap0 -f /dev/net/tun
-    #                           sudo tunctl -t tap0 -u $USER -f /dev/net/tun 
-    #                           sudo ip addr add 10.0.0.9/24 dev tap0
-    #                           sudo ip link set tap0 up""", shell=True)
-    #
-    #except OSError as e:
-    #        print >>sys.stderr, "Execution failed:", e
+    try :    
+            subprocess.call("""sudo tunctl -d tap0 -f /dev/net/tun
+                               sudo tunctl -t tap0 -u $USER -f /dev/net/tun 
+                               sudo ip addr add 10.0.0.9/24 dev tap0
+                               sudo ip link set tap0 up""", shell=True)
+    
+    except OSError as e:
+            print >>sys.stderr, "Execution failed:", e
 
     threading.Timer(2, process, (options.no_usrp, options.beacon_interv, options.spec_dB, options.remote_dB)).start()	
    	
     ## open the TUN/TAP interface
-    #tun_fd = open_tun_interface("/dev/net/tun")
-
-    #parent_conn, child_conn = Pipe()
-    ##tun = tunnel(child_conn.fileno(), tun_fd, VERBOSE, options.bytes, options.interval)
-    #tun = tunnel(child_conn.fileno(), VERBOSE, options.bytes, options.interval)
-    #tun.start()
+    tun_fd = os.open("/dev/net/tun", os.O_RDWR)
+    parent_conn, child_conn = Pipe()
+    tun = tunnel(child_conn.fileno(), tun_fd, options.verbose, options.bytes, options.interval)
+    tun.start()
     
     tb.start()
     tb.show()
@@ -474,15 +471,10 @@ def main(top_block_cls=transceiver_OQPSK_Master):
     qapp.connect(qapp, Qt.SIGNAL("aboutToQuit()"), quitting)
     qapp.exec_()
 
-#def open_tun_interface(tun_device_filename):
-#            
-#       	tun = os.open(tun_device_filename, os.O_RDWR)
-#        return tun
-
 class tunnel(threading.Thread):
 
-    #def __init__ (self, myPipe, tun_interface, verbose, bytes, interval):	
-    def __init__ (self, myPipe, verbose, bytes, interval):	
+    def __init__ (self, myPipe, tun_interface, verbose, bytes, interval):	
+    #def __init__ (self, myPipe, verbose, bytes, interval):	
 	print "TEST Tunnel"
 	threading.Thread.__init__(self)
 
@@ -500,11 +492,9 @@ class tunnel(threading.Thread):
         try :
             #Opening socket
   	    sendSock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
+#  	    udpSock = socket.socket(socket.AF_INET,  socket.SOCK_DGRAM)
             # bind it
             sendSock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-#             #Opening socket
-#  	    udpSock = socket.socket(socket.AF_INET,  socket.SOCK_DGRAM)
-#            # bind it
 #            udpSock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
   
             while 1:

@@ -1,3 +1,4 @@
+#!/bin/sh
 #python slave_transceiver_OQPSK.py -u "addr=usrp3" --source socket -f 626 & echo $! > .slave.pid
 #export DISPLAY=:0
 sudo xauth add $(xauth -f ~/.Xauthority list|tail -1)

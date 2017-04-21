@@ -10,7 +10,7 @@
 import subprocess, os, sys
 try:
         subprocess.call('ps auxw | grep -ie \'listenSlave\' | awk \'{print $2}\' | xargs sudo kill -9', shell=True) 
-#        subprocess.call('ps auxw | grep -ie ncat | awk \'{print $2}\' | xargs sudo kill -9', shell=True) 
+        subprocess.call('sudo ip link delete tap1', shell=True) 
 except OSError as e:
     print >>sys.stderr, "Execution failed:", e
 
@@ -224,6 +224,7 @@ class transceiver_OQPSK_Slave(gr.top_block, Qt.QWidget):
         # Asynch Message Connections
         ##################################################
 	if self.source == "tuntap": # Tuntap Block to quantify the achievable throughput
+		print "TUNTAP"
         	self.blocks_tuntap_pdu_0 = blocks.tuntap_pdu("tap1", 440)
         	self.msg_connect(self.ieee802_11_ether_encap_0, "to tap", self.blocks_tuntap_pdu_0, "pdus")
         	self.msg_connect(self.blocks_tuntap_pdu_0, "pdus", self.ieee802_11_ether_encap_0, "from tap")
@@ -309,7 +310,7 @@ def generator(size=56, chars=string.ascii_uppercase + string.digits):
 
 def sync(no_usrp, tunnel, scan, dwell, slot, period, interval):
 
-    global tb, gotSync, frequencies, i, Lines, actualFreq, tunName 
+    global tb, gotSync, frequencies, i, Lines, actualFreq#, tunName 
     global word, port, subp_listenSlave, tun
 
     data = generator()	
@@ -342,7 +343,6 @@ def sync(no_usrp, tunnel, scan, dwell, slot, period, interval):
 def periodCheck(no_usrp, tunnel, scan, dwell, slot, period, interval):
 
    global i, port, tun
-   #subp_listenSlave = subprocess.Popen('ncat -u -l -p 3333 | tee utils/listenSlave', shell=True) 
    subp_periodListen = subprocess.Popen('ncat -u -l -p 3333 > utils/listenSlave', shell=True) 
    gotBeacon = False	
    with open("utils/listenSlave", "r") as flistenSlave:	
@@ -361,7 +361,6 @@ def periodCheck(no_usrp, tunnel, scan, dwell, slot, period, interval):
 	i = 1	
 	print "\n\nConnection Lost...\nSynching again...."	
 	subp_periodListen.kill() 
-	#subp_listenSlave = subprocess.Popen('ncat -u -l -p 3333 | tee utils/listenSlave', shell=True) 
 	subp_periodListen = subprocess.Popen('ncat -u -l -p 3333 > utils/listenSlave', shell=True) 
 	threading.Timer(period,sync,[no_usrp, tunnel, scan, dwell, slot, period, interval]).start() 
 
@@ -375,7 +374,7 @@ def main(top_block_cls=transceiver_OQPSK_Slave):
         Qt.QApplication.setGraphicsSystem(style)
     qapp = Qt.QApplication(sys.argv)
 
-    global tb, usrp_addr, gotSync, frequencies, i, Lines, tunName
+    global tb, usrp_addr, gotSync, frequencies, i, Lines#, tunName
     global word, port, p_listenSlave, subp_listenSlave, tun	
 
     parser = OptionParser(option_class=eng_option, usage="%prog: [options]")
@@ -444,28 +443,21 @@ def main(top_block_cls=transceiver_OQPSK_Slave):
 
     subp_listenSlave = subprocess.Popen("ncat -u -l -p 3333 > utils/listenSlave",  shell=True)
 
-    if options.source == "tuntap": 
-    	try:
-    	    subprocess.call("sudo ifconfig tap1 192.168.200.2", shell=True)
-    	except OSError as e:
-    	    print "Execution failed: ", e
-   	
     ### Frequency Sweep procedure ##   	
     threading.Timer(2,
 		    sync,
 		    [options.no_usrp, options.tunnel, options.scan_interv, options.dwell, options.slot, options.period_check, options.interval]).start()
 
-    #if (options.tunnel):
-    #    parent_conn, child_conn = Pipe()		
-    #	tun = tunnel(tb.MAC, port, options.slot, child_conn.fileno(), options.interval, options.verbose)	
-    #try:    
-    #        subprocess.call("""sudo tunctl -d gr4 -f /dev/net/tun
-    #                           sudo tunctl -t gr4 -u $USER -f /dev/net/tun 
-    #                           sudo ip addr add 10.0.1.8/24 dev gr4
-    #                           sudo ip link set gr4 up""", shell=True)
-    #
-    #except OSError as e:
-    #        print >>sys.stderr, "Execution failed:", e
+    if (options.tunnel):
+        parent_conn, child_conn = Pipe()		
+    	tun = tunnel(tb.ieee802_15_4_mac_0, port, options.slot, child_conn.fileno(), options.interval, options.verbose)	
+    try:    
+            subprocess.call("""sudo tunctl -d tap1 -f /dev/net/tun
+                               sudo tunctl -t tap1 -u $USER -f /dev/net/tun 
+                               sudo ip addr add 10.0.1.8/24 dev tap1
+                               sudo ip link set tap1 up""", shell=True)
+    except OSError as e:
+            print >>sys.stderr, "Execution failed:", e
 
     tb.start()
     tb.show()
@@ -477,94 +469,94 @@ def main(top_block_cls=transceiver_OQPSK_Slave):
     qapp.exec_()
 
 def open_tun_interface(tun_device_filename):
-            
-       	tun = os.open(tun_device_filename, os.O_RDWR)
-        return tun
 
-#def open_tun_interface(tun_device_filename):
-#    
-#    mode = IFF_TAP | IFF_NO_PI
-#    TUNSETIFF = 0x400454ca
-#
-#    tun = os.open(tun_device_filename, os.O_RDWR)
-#    ifs = ioctl(tun, TUNSETIFF, struct.pack("16sH", "gr%d", mode))
-#    ifname = ifs[:16].strip("\x00")
-#    return (tun, ifname)
+    IFF_TUN         = 0x0001   # tunnel IP packets
+    IFF_TAP         = 0x0002   # tunnel ethernet frames
+    IFF_NO_PI       = 0x1000   # don't pass extra packet info
+    IFF_ONE_QUEUE   = 0x2000   # beats me ;)
+    TUNSETIFF       = 0x400454ca
 
-#class tunnel():
-#
-#    def __init__ (self, myMac, myPort, mySlot, myPipe, interval, verbose):
-#
-#	self.mac	= myMac
-#        self.myPort 	= myPort	
-#        self.mySlot 	= mySlot
-#	self.pipe_fd	= myPipe
-#	self.interval	= interval
-#	self.verbose	= verbose
-#
-#        # open the TUN/TAP interface
-#	(self.tun_fd, self.tun_ifname) = open_tun_interface("/dev/net/tun")
-#
-#        subprocess.call('sudo ifconfig ' + self.tun_ifname + ' 192.168.200.1', shell=True)
-#	
-#    def run(self) :
-#	if self.verbose: print "Running the tunnel main function ..."
-#        try :
-#	    listen = subprocess.Popen("./listenSlave.sh")
-#	    try:
-#	    	sendSock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
-#		# bind it
-#	        sendSock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-#	    except socket.error , msg:
-#	    	print 'Socket could not be created. Error Code : ' + str(msg[0]) + ' Message ' + msg[1]
-#	    	sys.exit()
-#
-#	    #Sending loop
-#            start_time = time.time()  
-#            while (time.time() - start_time) < self.mySlot:
-#		print "Testing 385"
-#		payload = os.read(self.tun_fd, 128)
-#		print "\n os.read(self.tun_fd, 128) ......    ", sys.stdout.write(payload), "\n"
-#		(inputready,outputready,exceptionready)= select.select([self.tun_fd,self.pipe_fd],[],[])
-#		print "Testing 373"
-#                if self.tun_fd in inputready :
-#		    print "Testing 379"
-#		    if self.verbose: Packet.printIpHeader(payload)
-#                    ip_header = payload[0:20]
-#                    (iph, protocol,iph_length,ip_length, src_ip,dst_ip) = Packet.unpackIpHeader(ip_header)
-#
-#                    if protocol == 1: #deal with ICMP echo request
-#			print "protocol == 1"	
-#                        packet = payload
-#                        icmp_type,icmp_code,icmp_identifier,icmp_sequence = Packet.unpackIcmpHeader(packet,iph_length)
-#                        if icmp_type == 8 : # type 8 is echo request
-#                            reply = Packet.createIcmpReply(packet)
-#			    if self.verbose: 
-#				#print "got an echo request replying with echo response"
-#                            	Packet.printIpHeader(reply)
-#                        #os.write(self.tun_fd,reply) 
-#			self.mac.app_in(pmt.cons(pmt.PMT_NIL, pmt.to_pmt(packet)))
-#		   
-#                    else:
-#			print "Testing 401"
-#			if self.verbose: print "Not an ICMP Packet"
-#			bytes = map(ord,payload)
-#			print "bytes @ 398", bytes
-#			self.mac.app_in(pmt.cons(pmt.PMT_NIL, pmt.to_pmt(bytes)))
-#			print "\n \n Passed 411"
-#
-#                elif self.pipe_fd in inputready:
-#		    print "self.pipe_fd in inputready"	
-#                    payload = os.read(self.pipe_fd, 256)
-#                    nwritten = os.write(self.tun_fd,payload)
-#                    if self.verbose: print " tunnel.run: write nbytes ", nwritten
-#                time.sleep(self.interval)
-#	    print "Testing 412"	
-#            listen.kill()
-#  	    sendSock.close()
-#
-#        finally:
-#            print "Exitting LOOP !!"
+    mode = IFF_TAP | IFF_NO_PI
+
+    tun = os.open(tun_device_filename, os.O_RDWR)
+    ifs = ioctl(tun, TUNSETIFF, struct.pack("16sH", "gr%d", mode))
+    ifname = ifs[:16].strip("\x00")
+    return (tun, ifname)
+
+class tunnel():
+
+    def __init__ (self, myMac, myPort, mySlot, myPipe, interval, verbose):
+	
+	self.mac	= myMac
+        self.myPort 	= myPort	
+        self.mySlot 	= mySlot
+	self.pipe_fd	= myPipe
+	self.interval	= interval
+	self.verbose	= verbose
+
+        # open the TUN/TAP interface
+	(self.tun_fd, self.tun_ifname) = open_tun_interface("/dev/net/tun")
+	print "tun_fd: ", self.tun_fd
+	print "ifname: ", self.tun_ifname
+
+    def run(self) :
+	print "Testing 509"
+	if self.verbose: print "Running the tunnel main function ..."
+        try :
+	    listen = subprocess.Popen("ncat -u -l -p 3333 > utils/listenSlave", shell=True)
+	    print "Testing 512"
+	    try:
+	    	sendSock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
+		# bind it
+	        sendSock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+	    except socket.error , msg:
+	    	print 'Socket could not be created. Error Code : ' + str(msg[0]) + ' Message ' + msg[1]
+	    	sys.exit()
+
+	    #Sending loop
+            start_time = time.time()  
+            while (time.time() - start_time) < self.mySlot:
+		print "Testing 518"
+		(inputready,outputready,exceptionready)= select.select([self.tun_fd,self.pipe_fd],[],[])
+		print "Testing 520"
+                if self.tun_fd in inputready :
+		    print "Testing 522"
+		    if self.verbose: Packet.printIpHeader(payload)
+                    ip_header = payload[0:20]
+                    (iph, protocol,iph_length,ip_length, src_ip,dst_ip) = Packet.unpackIpHeader(ip_header)
+
+                    if protocol == 1: #deal with ICMP echo request
+			print "protocol == 1"	
+                        packet = payload
+                        icmp_type,icmp_code,icmp_identifier,icmp_sequence = Packet.unpackIcmpHeader(packet,iph_length)
+                        if icmp_type == 8 : # type 8 is echo request
+                            reply = Packet.createIcmpReply(packet)
+			    if self.verbose: 
+				#print "got an echo request replying with echo response"
+                            	Packet.printIpHeader(reply)
+                        #os.write(self.tun_fd,reply) 
+			self.mac.app_in(pmt.cons(pmt.PMT_NIL, pmt.to_pmt(packet)))
+                    else:
+			print "Testing 401"
+			if self.verbose: print "Not an ICMP Packet"
+			bytes = map(ord,payload)
+			print "bytes @ 398", bytes
+			self.mac.app_in(pmt.cons(pmt.PMT_NIL, pmt.to_pmt(bytes)))
+			print "\n \n Passed 411"
+
+                elif self.pipe_fd in inputready:
+		    print "self.pipe_fd in inputready"	
+                    payload = os.read(self.pipe_fd, 256)
+                    nwritten = os.write(self.tun_fd,payload)
+                    if self.verbose: print " tunnel.run: write nbytes ", nwritten
+		print "Sleeping for a minute"
+                time.sleep(self.interval)
+	    print "Testing 552"	
+            listen.kill()
+  	    sendSock.close()
+
+        finally:
+            print "Exitting LOOP !!"
 
 if __name__ == '__main__':
   os.setpgrp() # create new process group, become its leader
