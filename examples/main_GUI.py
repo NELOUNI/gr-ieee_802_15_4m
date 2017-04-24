@@ -125,6 +125,7 @@ class main_GUI(QtGui.QWidget):
 	    print " Turning 802.15.4m Master Node OFF ... "
 	    print "######################################"
 	    subprocess.Popen('ps auxw | grep -ie \'master_transceiver_OQPSK.py\' | awk \'{print $2}\' | xargs sudo kill -9', shell=True)
+	    subprocess.Popen('ps auxw | grep -E \'ncat -u -l -p 3334\' | awk \'{print $2}\' | xargs sudo kill -9', shell=True)
 	    if "tap0" in netifaces.interfaces():
 		subprocess.Popen('sudo ip link delete tap0', shell=True)
 
@@ -141,6 +142,7 @@ class main_GUI(QtGui.QWidget):
 	    print " Turning 802.15.4m Slave Node OFF ... "
 	    print "######################################"
 	    subprocess.Popen('ps auxw | grep -ie \'slave_transceiver_OQPSK.py\' | awk \'{print $2}\' | xargs sudo kill -9', shell=True)
+	    subprocess.Popen('ps auxw | grep -ie \'ncat -u -l -p 3333\' | awk \'{print $2}\' | xargs sudo kill -9', shell=True)
 	    if "tap1" in netifaces.interfaces():
 	    	subprocess.Popen('sudo ip link delete tap1', shell=True)
 
